@@ -69,11 +69,31 @@ export interface QuizStats {
   bestCombo: number;
 }
 
+/** 单次答题明细记录（用于跨设备同步与回顾） */
+export interface QuizAttempt {
+  /** 唯一 ID，合并时用于去重 */
+  id: string;
+  /** 题目对应的音标 ID */
+  phonemeId: string;
+  /** 本次是否答对 */
+  correct: boolean;
+  /** 答对时的连对数 */
+  combo: number;
+  /** 答题时间（ISO 字符串） */
+  at: string;
+}
+
 export interface UserProgressState {
   phonemes: Record<string, PhonemeProgress>;
   /** 打卡日期列表 (YYYY-MM-DD) */
   checkedDays: string[];
   quizStats: QuizStats;
+  /** 收藏的音标 ID → 收藏时间戳(ms)，取消收藏后记录墓碑时间以便跨设备合并 */
+  favorites: Record<string, number>;
+  /** 取消收藏的音标 ID → 取消时间戳(ms) */
+  favoriteTombstones: Record<string, number>;
+  /** 答题明细（本地最多保留最近 MAX_ATTEMPTS 条） */
+  attempts: QuizAttempt[];
 }
 
 export interface ConfusablePair {

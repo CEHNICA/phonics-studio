@@ -4,6 +4,7 @@ import { ConfusablePairsLab } from './components/ConfusablePairsLab';
 import { FourteenDayPlan } from './components/FourteenDayPlan';
 import { ListeningQuiz } from './components/ListeningQuiz';
 import { TopHeader } from './components/TopHeader';
+import { UserDataPanel } from './components/UserDataPanel';
 import { CONFUSABLE_PAIRS, PHONEMES } from './data/phonics-catalog';
 import { usePhonicsProgress } from './hooks/usePhonicsProgress';
 import type { AppTab, StudyDayPlan } from './types/phonics';
@@ -17,15 +18,24 @@ export function App() {
   const [dayFilterIds, setDayFilterIds] = useState<string[] | null>(null);
   const [dayFilterLabel, setDayFilterLabel] = useState<string | null>(null);
   const [initialPairId, setInitialPairId] = useState<string | undefined>(undefined);
+  const [userDataOpen, setUserDataOpen] = useState<boolean>(false);
 
   const {
     progress,
     summary,
+    backendState,
+    lastSyncedAt,
+    favoriteIds,
+    syncCode,
     getPhonemeProgress,
     setRepresentativeWord,
     toggleCompleted,
     recordQuizAttempt,
+    toggleFavorite,
+    isFavorite,
     resetAllProgress,
+    syncNow,
+    applySyncCode,
   } = usePhonicsProgress();
 
   const handleOpenInStudio = useCallback((phonemeId: string) => {
@@ -84,6 +94,9 @@ export function App() {
         totalCount={summary.totalCount}
         checkedDaysCount={summary.checkedDaysCount}
         onResetProgress={resetAllProgress}
+        favoriteCount={summary.favoriteCount}
+        backendState={backendState}
+        onOpenUserData={() => setUserDataOpen(true)}
       />
 
       {activeTab === 'studio' && (
@@ -97,6 +110,9 @@ export function App() {
           dayFilterLabel={dayFilterLabel}
           onClearDayFilter={handleClearDayFilter}
           onJumpToPair={handleJumpToPair}
+          favoriteIds={favoriteIds}
+          onToggleFavorite={toggleFavorite}
+          isFavorite={isFavorite}
         />
       )}
 
@@ -123,6 +139,21 @@ export function App() {
           onJumpToStudio={handleOpenInStudio}
         />
       )}
+
+      <UserDataPanel
+        open={userDataOpen}
+        onClose={() => setUserDataOpen(false)}
+        favoriteIds={favoriteIds}
+        attempts={progress.attempts}
+        backendState={backendState}
+        lastSyncedAt={lastSyncedAt}
+        syncCode={syncCode}
+        onSelectPhoneme={handleOpenInStudio}
+        onSyncNow={() => {
+          void syncNow();
+        }}
+        onApplySyncCode={applySyncCode}
+      />
     </div>
   );
 }

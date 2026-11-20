@@ -1,5 +1,16 @@
-import { BookOpen, CalendarDays, Gamepad2, GitCompare, RotateCcw, Sparkles } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarDays,
+  Cloud,
+  CloudOff,
+  Gamepad2,
+  GitCompare,
+  RotateCcw,
+  Sparkles,
+  Star,
+} from 'lucide-react';
 import { CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
+import type { BackendState } from '../services/backend/types';
 import type { AppTab } from '../types/phonics';
 
 interface TopHeaderProps {
@@ -10,7 +21,18 @@ interface TopHeaderProps {
   totalCount: number;
   checkedDaysCount: number;
   onResetProgress: () => void;
+  favoriteCount: number;
+  backendState: BackendState;
+  onOpenUserData: () => void;
 }
+
+const SYNC_STATE_TEXT: Record<BackendState, string> = {
+  local: '数据仅保存在本机',
+  connecting: '正在同步到云端…',
+  synced: '已同步到云端',
+  offline: '云端连不上，数据仍在本机',
+  error: '同步失败，稍后自动重试',
+};
 
 const NAV_ITEMS: Array<{ id: AppTab; label: string; shortLabel: string; icon: typeof BookOpen }> = [
   { id: 'studio', label: '音标卡片馆', shortLabel: '卡片馆', icon: BookOpen },
@@ -30,6 +52,9 @@ export function TopHeader({
   totalCount,
   checkedDaysCount,
   onResetProgress,
+  favoriteCount,
+  backendState,
+  onOpenUserData,
 }: TopHeaderProps) {
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -85,6 +110,26 @@ export function TopHeader({
             <span className="stat-label">打卡</span>
             <strong>{checkedDaysCount} 天</strong>
           </div>
+
+          <button
+            type="button"
+            className="user-data-btn"
+            onClick={onOpenUserData}
+            title="我的数据：收藏夹、答题记录、云同步设置"
+          >
+            <Star size={15} fill={favoriteCount > 0 ? 'currentColor' : 'none'} />
+            <span className="user-data-btn-count">{favoriteCount}</span>
+            <span
+              className={`sync-state-icon state-${backendState}`}
+              title={SYNC_STATE_TEXT[backendState]}
+            >
+              {backendState === 'offline' || backendState === 'error' ? (
+                <CloudOff size={13} />
+              ) : (
+                <Cloud size={13} />
+              )}
+            </span>
+          </button>
 
           <button
             type="button"

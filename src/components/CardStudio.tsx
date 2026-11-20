@@ -10,6 +10,7 @@ import {
   Play,
   Repeat,
   Square,
+  Star,
   Volume2,
 } from 'lucide-react';
 import { PHONEME_MAP, PHONEMES, getRelatedConfusableIds } from '../data/phonics-catalog';
@@ -33,6 +34,9 @@ interface CardStudioProps {
   dayFilterLabel: string | null;
   onClearDayFilter: () => void;
   onJumpToPair: (phonemeId: string) => void;
+  favoriteIds: string[];
+  onToggleFavorite: (phonemeId: string) => void;
+  isFavorite: (phonemeId: string) => boolean;
 }
 
 const CARD_OPTION_LETTERS = ['A', 'B', 'C'];
@@ -52,6 +56,9 @@ export function CardStudio({
   dayFilterLabel,
   onClearDayFilter,
   onJumpToPair,
+  favoriteIds,
+  onToggleFavorite,
+  isFavorite,
 }: CardStudioProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>('all');
@@ -89,9 +96,12 @@ export function CardStudio({
       if (progressFilter === 'mastered') {
         return record.completed && record.mistakeCount === 0;
       }
+      if (progressFilter === 'favorite') {
+        return favoriteIds.includes(item.id);
+      }
       return true;
     });
-  }, [dayFilterIds, getPhonemeProgress, progressFilter, selectedCategory]);
+  }, [dayFilterIds, favoriteIds, getPhonemeProgress, progressFilter, selectedCategory]);
 
   const currentPhoneme = PHONEME_MAP[currentPhonemeId] ?? PHONEMES[0];
   const currentProgress = getPhonemeProgress(currentPhoneme.id);
@@ -254,6 +264,7 @@ export function CardStudio({
         dayFilterIds={dayFilterIds}
         dayFilterLabel={dayFilterLabel}
         onClearDayFilter={onClearDayFilter}
+        favoriteIds={favoriteIds}
       />
 
       <main className="studio-main">
@@ -280,6 +291,19 @@ export function CardStudio({
             </button>
 
             <div className="pager-buttons">
+              <button
+                type="button"
+                className={`favorite-toggle-btn ${isFavorite(currentPhoneme.id) ? 'active' : ''}`}
+                onClick={() => onToggleFavorite(currentPhoneme.id)}
+                title={isFavorite(currentPhoneme.id) ? '取消收藏这个音标' : '收藏这个音标'}
+                aria-pressed={isFavorite(currentPhoneme.id)}
+              >
+                <Star
+                  size={16}
+                  fill={isFavorite(currentPhoneme.id) ? 'currentColor' : 'none'}
+                />
+              </button>
+
               <button
                 type="button"
                 className="icon-nav-btn"

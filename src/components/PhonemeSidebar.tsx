@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CheckCircle2, ChevronDown, ChevronUp, Filter, Star } from 'lucide-react';
 import { PHONEME_CATEGORIES, PHONEME_MAP } from '../data/phonics-catalog';
 import { CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
 
-export type ProgressFilter = 'all' | 'unlearned' | 'review' | 'mastered';
+export type ProgressFilter = 'all' | 'unlearned' | 'review' | 'mastered' | 'favorite';
 
 interface PhonemeSidebarProps {
   phonemes: PhonemeItem[];
@@ -18,6 +18,7 @@ interface PhonemeSidebarProps {
   dayFilterIds: string[] | null;
   dayFilterLabel: string | null;
   onClearDayFilter: () => void;
+  favoriteIds: string[];
 }
 
 const PROGRESS_FILTERS: Array<{ id: ProgressFilter; label: string }> = [
@@ -25,6 +26,7 @@ const PROGRESS_FILTERS: Array<{ id: ProgressFilter; label: string }> = [
   { id: 'unlearned', label: '未学' },
   { id: 'review', label: '待巩固' },
   { id: 'mastered', label: '已掌握' },
+  { id: 'favorite', label: '收藏' },
 ];
 
 /**
@@ -42,9 +44,11 @@ export function PhonemeSidebar({
   dayFilterIds,
   dayFilterLabel,
   onClearDayFilter,
+  favoriteIds,
 }: PhonemeSidebarProps) {
   const [mobileExpanded, setMobileExpanded] = useState<boolean>(false);
   const currentPhoneme = PHONEME_MAP[currentPhonemeId];
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
 
   const handlePickPhoneme = (phonemeId: string) => {
     onSelectPhoneme(phonemeId);
@@ -157,6 +161,7 @@ export function PhonemeSidebar({
                     onClick={() => onSelectProgressFilter(item.id)}
                   >
                     {item.label}
+                    {item.id === 'favorite' && favoriteIds.length > 0 ? ` ${favoriteIds.length}` : ''}
                   </button>
                 ))}
               </div>
@@ -183,6 +188,11 @@ export function PhonemeSidebar({
                   <span className="tile-order">{String(item.order).padStart(2, '0')}</span>
                   <span className="tile-symbol">{item.symbol}</span>
                   <span className="tile-meta">
+                    {favoriteSet.has(item.id) && (
+                      <span title="已收藏">
+                        <Star size={11} className="tile-star" fill="currentColor" />
+                      </span>
+                    )}
                     {record.mistakeCount > 0 ? (
                       <span
                         className="tile-dot review-dot"
