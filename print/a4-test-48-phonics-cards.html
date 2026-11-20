@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>48 音标卡片单词测试表（单页A4黑白打印版）</title>
+  <style>
+@page {
+  size: A4 portrait;
+  margin: 8mm 9mm;
+}
+* {
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #111111;
+  font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.sheet {
+  width: 100%;
+}
+.header {
+  border: 1.4pt solid #111111;
+  border-radius: 5pt;
+  padding: 6pt 10pt 5pt;
+  margin-bottom: 6pt;
+}
+.header-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 0.75pt solid #444444;
+  padding-bottom: 3.5pt;
+  margin-bottom: 4.5pt;
+  gap: 8pt;
+}
+.title {
+  font-size: 13.5pt;
+  font-weight: 800;
+  letter-spacing: 0.4pt;
+  margin: 0;
+  white-space: nowrap;
+}
+.subtitle {
+  font-size: 8pt;
+  color: #333333;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 8.6pt;
+  gap: 8pt;
+}
+.meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3pt;
+  white-space: nowrap;
+}
+.blank-line {
+  display: inline-block;
+  border-bottom: 0.75pt solid #222222;
+  min-width: 50pt;
+  height: 9.5pt;
+}
+.blank-line.short {
+  min-width: 24pt;
+}
+.footer-note {
+  margin-top: 5.5pt;
+  border: 0.75pt solid #444444;
+  border-radius: 4pt;
+  padding: 4.5pt 8pt;
+  font-size: 8pt;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8pt;
+}
+.footer-blank {
+  flex: 1;
+  border-bottom: 0.6pt dashed #666666;
+  height: 9pt;
+}
+@media screen {
+  body {
+    background: #ececec;
+    padding: 16px;
+  }
+  .sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 8mm 9mm;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.14);
+  }
+}
+
+    .two-col-tables {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7pt;
+    }
+    .ph-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 8.6pt;
+    }
+    .ph-table th {
+      background: #e9e9e9;
+      border: 0.8pt solid #222222;
+      padding: 4.5pt 3pt;
+      font-size: 8pt;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .ph-table td {
+      border: 0.6pt solid #777777;
+      padding: 5.8pt 4pt;
+      vertical-align: middle;
+    }
+    .ph-table tbody tr:nth-child(even) {
+      background: #f6f6f6;
+    }
+    .ph-table th:nth-child(1) { width: 32pt; }
+    .ph-table th:nth-child(2) { width: 34pt; }
+    .col-no {
+      text-align: center;
+      font-size: 7.4pt;
+      color: #333333;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .cat-tag {
+      display: inline-block;
+      margin-left: 2pt;
+      font-size: 6.4pt;
+      border: 0.5pt solid #777777;
+      border-radius: 2pt;
+      padding: 0 1.5pt;
+      color: #222222;
+      background: #ffffff;
+    }
+    .col-ipa {
+      text-align: center;
+      font-family: "Segoe UI", "Lucida Sans Unicode", Arial, sans-serif;
+      font-size: 9.2pt;
+      font-weight: 700;
+      color: #000000;
+      background: #fafafa;
+      white-space: nowrap;
+    }
+    .w-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 2pt;
+    }
+    .w-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 2.5pt;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .box {
+      width: 6.8pt;
+      height: 6.8pt;
+      border: 0.75pt solid #222222;
+      border-radius: 1pt;
+      flex-shrink: 0;
+      background: #ffffff;
+    }
+    .w-txt {
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 8.3pt;
+      font-weight: 600;
+      letter-spacing: -0.1pt;
+    }
+    </style>
+</head>
+<body>
+  <div class="sheet">
+    <header class="header">
+      <div class="header-top">
+        <h1 class="title">48 国际音标核心单词过关测试表</h1>
+        <span class="subtitle">黑白打印专用 · 共 48 音标 / 144 词次（去重 121 词）</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-field">姓名：<span class="blank-line"></span></span>
+        <span class="meta-field">日期：<span class="blank-line"></span></span>
+        <span class="meta-field">测试模式：□ 见词拼读 &nbsp; □ 听音默写</span>
+        <span class="meta-field">过关数：<span class="blank-line short"></span> / 144</span>
+      </div>
+    </header>
+    <div class="two-col-tables">
+      <table class="ph-table"><thead><tr><th>序号</th><th>音标</th><th>认读 / 拼写测试词（过关打 √）</th></tr></thead><tbody><tr><td class="col-no">01<span class="cat-tag">元</span></td><td class="col-ipa">/iː/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">tea</span></span><span class="w-item"><span class="box"></span><span class="w-txt">sea</span></span><span class="w-item"><span class="box"></span><span class="w-txt">bee</span></span></div></td></tr><tr><td class="col-no">02<span class="cat-tag">元</span></td><td class="col-ipa">/ɪ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">pig</span></span><span class="w-item"><span class="box"></span><span class="w-txt">fish</span></span><span class="w-item"><span class="box"></span><span class="w-txt">milk</span></span></div></td></tr><tr><td class="col-no">03<span class="cat-tag">元</span></td><td class="col-ipa">/e/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">bed</span></span><span class="w-item"><span class="box"></span><span class="w-txt">egg</span></span><span class="w-item"><span class="box"></span><span class="w-txt">red</span></span></div></td></tr><tr><td class="col-no">04<span class="cat-tag">元</span></td><td class="col-ipa">/æ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cat</span></span><span class="w-item"><span class="box"></span><span class="w-txt">apple</span></span><span class="w-item"><span class="box"></span><span class="w-txt">bag</span></span></div></td></tr><tr><td class="col-no">05<span class="cat-tag">元</span></td><td class="col-ipa">/ɜː/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">bird</span></span><span class="w-item"><span class="box"></span><span class="w-txt">girl</span></span><span class="w-item"><span class="box"></span><span class="w-txt">skirt</span></span></div></td></tr><tr><td class="col-no">06<span class="cat-tag">元</span></td><td class="col-ipa">/ə/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">panda</span></span><span class="w-item"><span class="box"></span><span class="w-txt">banana</span></span><span class="w-item"><span class="box"></span><span class="w-txt">water</span></span></div></td></tr><tr><td class="col-no">07<span class="cat-tag">元</span></td><td class="col-ipa">/ʌ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cup</span></span><span class="w-item"><span class="box"></span><span class="w-txt">duck</span></span><span class="w-item"><span class="box"></span><span class="w-txt">sun</span></span></div></td></tr><tr><td class="col-no">08<span class="cat-tag">元</span></td><td class="col-ipa">/uː/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">zoo</span></span><span class="w-item"><span class="box"></span><span class="w-txt">moon</span></span><span class="w-item"><span class="box"></span><span class="w-txt">cool</span></span></div></td></tr><tr><td class="col-no">09<span class="cat-tag">元</span></td><td class="col-ipa">/ʊ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">book</span></span><span class="w-item"><span class="box"></span><span class="w-txt">foot</span></span><span class="w-item"><span class="box"></span><span class="w-txt">look</span></span></div></td></tr><tr><td class="col-no">10<span class="cat-tag">元</span></td><td class="col-ipa">/ɔː/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">door</span></span><span class="w-item"><span class="box"></span><span class="w-txt">ball</span></span><span class="w-item"><span class="box"></span><span class="w-txt">horse</span></span></div></td></tr><tr><td class="col-no">11<span class="cat-tag">元</span></td><td class="col-ipa">/ɒ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">dog</span></span><span class="w-item"><span class="box"></span><span class="w-txt">box</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hot</span></span></div></td></tr><tr><td class="col-no">12<span class="cat-tag">元</span></td><td class="col-ipa">/ɑː/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">car</span></span><span class="w-item"><span class="box"></span><span class="w-txt">star</span></span><span class="w-item"><span class="box"></span><span class="w-txt">park</span></span></div></td></tr><tr><td class="col-no">13<span class="cat-tag">元</span></td><td class="col-ipa">/eɪ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cake</span></span><span class="w-item"><span class="box"></span><span class="w-txt">face</span></span><span class="w-item"><span class="box"></span><span class="w-txt">rain</span></span></div></td></tr><tr><td class="col-no">14<span class="cat-tag">元</span></td><td class="col-ipa">/aɪ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">fly</span></span><span class="w-item"><span class="box"></span><span class="w-txt">kite</span></span><span class="w-item"><span class="box"></span><span class="w-txt">ice</span></span></div></td></tr><tr><td class="col-no">15<span class="cat-tag">元</span></td><td class="col-ipa">/ɔɪ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">boy</span></span><span class="w-item"><span class="box"></span><span class="w-txt">toy</span></span><span class="w-item"><span class="box"></span><span class="w-txt">joy</span></span></div></td></tr><tr><td class="col-no">16<span class="cat-tag">元</span></td><td class="col-ipa">/əʊ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">nose</span></span><span class="w-item"><span class="box"></span><span class="w-txt">rose</span></span><span class="w-item"><span class="box"></span><span class="w-txt">snow</span></span></div></td></tr><tr><td class="col-no">17<span class="cat-tag">元</span></td><td class="col-ipa">/aʊ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cow</span></span><span class="w-item"><span class="box"></span><span class="w-txt">cloud</span></span><span class="w-item"><span class="box"></span><span class="w-txt">house</span></span></div></td></tr><tr><td class="col-no">18<span class="cat-tag">元</span></td><td class="col-ipa">/ɪə/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">ear</span></span><span class="w-item"><span class="box"></span><span class="w-txt">deer</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hear</span></span></div></td></tr><tr><td class="col-no">19<span class="cat-tag">元</span></td><td class="col-ipa">/eə/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">bear</span></span><span class="w-item"><span class="box"></span><span class="w-txt">pear</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hair</span></span></div></td></tr><tr><td class="col-no">20<span class="cat-tag">元</span></td><td class="col-ipa">/ʊə/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">poor</span></span><span class="w-item"><span class="box"></span><span class="w-txt">tour</span></span><span class="w-item"><span class="box"></span><span class="w-txt">sure</span></span></div></td></tr><tr><td class="col-no">21<span class="cat-tag">辅</span></td><td class="col-ipa">/p/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">pen</span></span><span class="w-item"><span class="box"></span><span class="w-txt">panda</span></span><span class="w-item"><span class="box"></span><span class="w-txt">pig</span></span></div></td></tr><tr><td class="col-no">22<span class="cat-tag">辅</span></td><td class="col-ipa">/b/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">book</span></span><span class="w-item"><span class="box"></span><span class="w-txt">bear</span></span><span class="w-item"><span class="box"></span><span class="w-txt">baby</span></span></div></td></tr><tr><td class="col-no">23<span class="cat-tag">辅</span></td><td class="col-ipa">/t/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">tea</span></span><span class="w-item"><span class="box"></span><span class="w-txt">tiger</span></span><span class="w-item"><span class="box"></span><span class="w-txt">two</span></span></div></td></tr><tr><td class="col-no">24<span class="cat-tag">辅</span></td><td class="col-ipa">/d/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">dog</span></span><span class="w-item"><span class="box"></span><span class="w-txt">door</span></span><span class="w-item"><span class="box"></span><span class="w-txt">duck</span></span></div></td></tr></tbody></table>
+      <table class="ph-table"><thead><tr><th>序号</th><th>音标</th><th>认读 / 拼写测试词（过关打 √）</th></tr></thead><tbody><tr><td class="col-no">25<span class="cat-tag">辅</span></td><td class="col-ipa">/k/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cat</span></span><span class="w-item"><span class="box"></span><span class="w-txt">kite</span></span><span class="w-item"><span class="box"></span><span class="w-txt">cake</span></span></div></td></tr><tr><td class="col-no">26<span class="cat-tag">辅</span></td><td class="col-ipa">/ɡ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">girl</span></span><span class="w-item"><span class="box"></span><span class="w-txt">good</span></span><span class="w-item"><span class="box"></span><span class="w-txt">game</span></span></div></td></tr><tr><td class="col-no">27<span class="cat-tag">辅</span></td><td class="col-ipa">/f/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">fish</span></span><span class="w-item"><span class="box"></span><span class="w-txt">fox</span></span><span class="w-item"><span class="box"></span><span class="w-txt">five</span></span></div></td></tr><tr><td class="col-no">28<span class="cat-tag">辅</span></td><td class="col-ipa">/v/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">vest</span></span><span class="w-item"><span class="box"></span><span class="w-txt">seven</span></span><span class="w-item"><span class="box"></span><span class="w-txt">love</span></span></div></td></tr><tr><td class="col-no">29<span class="cat-tag">辅</span></td><td class="col-ipa">/θ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">three</span></span><span class="w-item"><span class="box"></span><span class="w-txt">mouth</span></span><span class="w-item"><span class="box"></span><span class="w-txt">maths</span></span></div></td></tr><tr><td class="col-no">30<span class="cat-tag">辅</span></td><td class="col-ipa">/ð/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">this</span></span><span class="w-item"><span class="box"></span><span class="w-txt">mother</span></span><span class="w-item"><span class="box"></span><span class="w-txt">brother</span></span></div></td></tr><tr><td class="col-no">31<span class="cat-tag">辅</span></td><td class="col-ipa">/s/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">sun</span></span><span class="w-item"><span class="box"></span><span class="w-txt">snake</span></span><span class="w-item"><span class="box"></span><span class="w-txt">bus</span></span></div></td></tr><tr><td class="col-no">32<span class="cat-tag">辅</span></td><td class="col-ipa">/z/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">zoo</span></span><span class="w-item"><span class="box"></span><span class="w-txt">zero</span></span><span class="w-item"><span class="box"></span><span class="w-txt">nose</span></span></div></td></tr><tr><td class="col-no">33<span class="cat-tag">辅</span></td><td class="col-ipa">/ʃ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">ship</span></span><span class="w-item"><span class="box"></span><span class="w-txt">shoe</span></span><span class="w-item"><span class="box"></span><span class="w-txt">fish</span></span></div></td></tr><tr><td class="col-no">34<span class="cat-tag">辅</span></td><td class="col-ipa">/ʒ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">television</span></span><span class="w-item"><span class="box"></span><span class="w-txt">usually</span></span><span class="w-item"><span class="box"></span><span class="w-txt">measure</span></span></div></td></tr><tr><td class="col-no">35<span class="cat-tag">辅</span></td><td class="col-ipa">/h/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">hat</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hand</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hot</span></span></div></td></tr><tr><td class="col-no">36<span class="cat-tag">辅</span></td><td class="col-ipa">/r/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">red</span></span><span class="w-item"><span class="box"></span><span class="w-txt">run</span></span><span class="w-item"><span class="box"></span><span class="w-txt">rabbit</span></span></div></td></tr><tr><td class="col-no">37<span class="cat-tag">辅</span></td><td class="col-ipa">/tʃ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">chair</span></span><span class="w-item"><span class="box"></span><span class="w-txt">chicken</span></span><span class="w-item"><span class="box"></span><span class="w-txt">teacher</span></span></div></td></tr><tr><td class="col-no">38<span class="cat-tag">辅</span></td><td class="col-ipa">/dʒ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">juice</span></span><span class="w-item"><span class="box"></span><span class="w-txt">jump</span></span><span class="w-item"><span class="box"></span><span class="w-txt">orange</span></span></div></td></tr><tr><td class="col-no">39<span class="cat-tag">辅</span></td><td class="col-ipa">/tr/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">tree</span></span><span class="w-item"><span class="box"></span><span class="w-txt">train</span></span><span class="w-item"><span class="box"></span><span class="w-txt">truck</span></span></div></td></tr><tr><td class="col-no">40<span class="cat-tag">辅</span></td><td class="col-ipa">/dr/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">dress</span></span><span class="w-item"><span class="box"></span><span class="w-txt">dragon</span></span><span class="w-item"><span class="box"></span><span class="w-txt">draw</span></span></div></td></tr><tr><td class="col-no">41<span class="cat-tag">辅</span></td><td class="col-ipa">/ts/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">cats</span></span><span class="w-item"><span class="box"></span><span class="w-txt">kites</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hats</span></span></div></td></tr><tr><td class="col-no">42<span class="cat-tag">辅</span></td><td class="col-ipa">/dz/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">birds</span></span><span class="w-item"><span class="box"></span><span class="w-txt">hands</span></span><span class="w-item"><span class="box"></span><span class="w-txt">beds</span></span></div></td></tr><tr><td class="col-no">43<span class="cat-tag">辅</span></td><td class="col-ipa">/m/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">monkey</span></span><span class="w-item"><span class="box"></span><span class="w-txt">milk</span></span><span class="w-item"><span class="box"></span><span class="w-txt">mum</span></span></div></td></tr><tr><td class="col-no">44<span class="cat-tag">辅</span></td><td class="col-ipa">/n/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">nose</span></span><span class="w-item"><span class="box"></span><span class="w-txt">nut</span></span><span class="w-item"><span class="box"></span><span class="w-txt">nine</span></span></div></td></tr><tr><td class="col-no">45<span class="cat-tag">辅</span></td><td class="col-ipa">/ŋ/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">sing</span></span><span class="w-item"><span class="box"></span><span class="w-txt">ring</span></span><span class="w-item"><span class="box"></span><span class="w-txt">spring</span></span></div></td></tr><tr><td class="col-no">46<span class="cat-tag">辅</span></td><td class="col-ipa">/l/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">lion</span></span><span class="w-item"><span class="box"></span><span class="w-txt">leg</span></span><span class="w-item"><span class="box"></span><span class="w-txt">apple</span></span></div></td></tr><tr><td class="col-no">47<span class="cat-tag">辅</span></td><td class="col-ipa">/w/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">water</span></span><span class="w-item"><span class="box"></span><span class="w-txt">window</span></span><span class="w-item"><span class="box"></span><span class="w-txt">white</span></span></div></td></tr><tr><td class="col-no">48<span class="cat-tag">辅</span></td><td class="col-ipa">/j/</td><td class="col-words"><div class="w-grid"><span class="w-item"><span class="box"></span><span class="w-txt">yes</span></span><span class="w-item"><span class="box"></span><span class="w-txt">yellow</span></span><span class="w-item"><span class="box"></span><span class="w-txt">yo-yo</span></span></div></td></tr></tbody></table>
+    </div>
+    <footer class="footer-note">
+      <strong>错词 / 待巩固记录：</strong>
+      <span class="footer-blank"></span>
+      <span>老师 / 家长签字：<span class="blank-line"></span></span>
+    </footer>
+  </div>
+</body>
+</html>

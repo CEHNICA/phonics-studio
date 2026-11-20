@@ -1,0 +1,94 @@
+/**
+ * 音标学习应用核心类型定义
+ */
+
+export type PhonemeFamily = 'vowel' | 'consonant';
+
+export interface PhonemeCategory {
+  id: string;
+  family: PhonemeFamily;
+  title: string;
+  description: string;
+}
+
+export interface PhonemeExample {
+  word: string;
+  phonetic: string;
+  meaning: string;
+}
+
+export interface RawPhonemeItem {
+  id: string;
+  symbol: string;
+  category: string;
+  audioSrc: string;
+  videoSrc: string;
+  pronunciationTips: string[];
+  confusionNote: string;
+  examples: PhonemeExample[];
+}
+
+export interface RawPhoneticsDataset {
+  categories: PhonemeCategory[];
+  phonemes: RawPhonemeItem[];
+}
+
+export interface PhonemeItem extends RawPhonemeItem {
+  /** 1 到 48 的序号 */
+  order: number;
+  /** 所属元音/辅音大类 */
+  family: PhonemeFamily;
+  /** 分类中文标题 */
+  categoryTitle: string;
+  /** 本地插画卡片路径 */
+  cardSrc: string;
+  /** 本地标准发音音频路径 */
+  localAudioSrc: string;
+  /** 本地口型演示视频路径 */
+  localVideoSrc: string;
+  /** 手绘插画卡片上自带的 A/B/C 三个代表词 */
+  cardWords: string[];
+}
+
+export interface PhonemeProgress {
+  /** 选择或输入的“我的代表词” */
+  representativeWord: string;
+  /** 是否已完成学习 */
+  completed: boolean;
+  /** 测验累计答错次数，用于筛选待巩固音标 */
+  mistakeCount: number;
+  /** 最近学习时间戳 */
+  lastStudiedAt?: string;
+}
+
+export interface QuizStats {
+  totalAnswered: number;
+  totalCorrect: number;
+  bestCombo: number;
+}
+
+export interface UserProgressState {
+  phonemes: Record<string, PhonemeProgress>;
+  /** 打卡日期列表 (YYYY-MM-DD) */
+  checkedDays: string[];
+  quizStats: QuizStats;
+}
+
+export interface ConfusablePair {
+  id: string;
+  title: string;
+  leftId: string;
+  rightId: string;
+  tag: string;
+  keyDifference: string;
+}
+
+export interface StudyDayPlan {
+  day: number;
+  title: string;
+  subtitle: string;
+  phonemeIds: string[];
+  goalTip: string;
+}
+
+export type AppTab = 'studio' | 'plan' | 'pairs' | 'quiz';
