@@ -55,8 +55,10 @@ export interface PhonemeProgress {
   representativeWord: string;
   /** 是否已完成学习 */
   completed: boolean;
-  /** 测验累计答错次数，用于筛选待巩固音标 */
+  /** 测验累计答错次数，用于筛选待巩固音标；连续答对达标后自动清零 */
   mistakeCount: number;
+  /** 该音标连续答对次数，达到阈值即自动移出待巩固 */
+  consecutiveCorrect: number;
   /** 最近学习时间戳 */
   lastStudiedAt?: string;
 }

@@ -24,6 +24,7 @@ npm run dev       # 开发服务器
 npm run build     # 生产构建，产物在 dist/
 npm run preview   # 预览生产构建
 npm run lint      # Oxlint 检查
+npm test          # 「待巩固」规则回归测试（纯 Node，无需浏览器）
 ```
 
 Windows 用户也可以直接双击 **`start-study.bat`**：它会拉起本地静态服务并打开 <http://localhost:4173>。
@@ -55,6 +56,16 @@ scripts/
   build-phoneme-templates.ts   离线重建音素模板
 print/    A4 打印版测验表（HTML + PDF）
 ```
+
+## 「待巩固」判定规则
+
+顶部状态栏的「待巩固 N 音」= 测验里答错过、且**还没重新拿下**的音标数量。
+
+- 答错：进入「待巩固」，错题计数 +1，连续答对次数清零
+- 答对：连续答对次数 +1；**连续答对 3 次自动移出「待巩固」**（错题计数归零）
+- 移出后再答错，会重新回到「待巩固」
+
+侧边栏的筛选档位：`未学`（未打卡）、`待巩固`（错题计数 > 0）、`已掌握`（已打卡且错题计数为 0）。规则实现见 `src/utils/consolidation.ts`，回归测试见 `scripts/test-consolidation.ts`。
 
 ## 重新生成音素声学模板
 

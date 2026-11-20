@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PHONEMES } from '../data/phonics-catalog';
+import { applyQuizOutcome, CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
 import type { PhonemeProgress, UserProgressState } from '../types/phonics';
 
 const STORAGE_KEY = 'phonics-studio-progress-v1';
+
+export { CONSOLIDATE_THRESHOLD };
 
 const DEFAULT_PROGRESS: UserProgressState = {
   phonemes: {},
@@ -18,6 +21,7 @@ const EMPTY_PHONEME_PROGRESS: PhonemeProgress = {
   representativeWord: '',
   completed: false,
   mistakeCount: 0,
+  consecutiveCorrect: 0,
 };
 
 /**
@@ -32,6 +36,19 @@ function getTodayDateString(): string {
 }
 
 /**
+ * 兼容旧版本存档：补齐缺失的 consecutiveCorrect 字段
+ */
+function normalizePhonemeProgress(raw: Partial<PhonemeProgress>): PhonemeProgress {
+  return {
+    representativeWord: raw.representativeWord ?? '',
+    completed: raw.completed ?? false,
+    mistakeCount: raw.mistakeCount ?? 0,
+    consecutiveCorrect: raw.consecutiveCorrect ?? 0,
+    lastStudiedAt: raw.lastStudiedAt,
+  };
+}
+
+/**
  * 安全读取本地存储的学习进度
  */
 function loadInitialProgress(): UserProgressState {
@@ -41,8 +58,13 @@ function loadInitialProgress(): UserProgressState {
       return DEFAULT_PROGRESS;
     }
     const parsed = JSON.parse(raw) as Partial<UserProgressState>;
+    const source = parsed.phonemes ?? {};
+    const phonemes: Record<string, PhonemeProgress> = {};
+    for (const [id, record] of Object.entries(source)) {
+      phonemes[id] = normalizePhonemeProgress(record ?? {});
+    }
     return {
-      phonemes: parsed.phonemes ?? {},
+      phonemes,
       checkedDays: Array.isArray(parsed.checkedDays) ? parsed.checkedDays : [],
       quizStats: {
         totalAnswered: parsed.quizStats?.totalAnswered ?? 0,
@@ -128,13 +150,18 @@ export function usePhonicsProgress() {
       setProgress((prev) => {
         const current = prev.phonemes[phonemeId] ?? EMPTY_PHONEME_PROGRESS;
         const hasCheckedToday = prev.checkedDays.includes(today);
+
+        // 答对累加连对次数，答错则清零并重新计入待巩固
+        const outcome = applyQuizOutcome(current, isCorrect);
+
         return {
           ...prev,
           phonemes: {
             ...prev.phonemes,
             [phonemeId]: {
               ...current,
-              mistakeCount: isCorrect ? current.mistakeCount : current.mistakeCount + 1,
+              mistakeCount: outcome.mistakeCount,
+              consecutiveCorrect: outcome.consecutiveCorrect,
               lastStudiedAt: new Date().toISOString(),
             },
           },

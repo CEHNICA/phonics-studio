@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { PHONEME_CATEGORIES, PHONEME_MAP } from '../data/phonics-catalog';
+import { CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
 
 export type ProgressFilter = 'all' | 'unlearned' | 'review' | 'mastered';
@@ -182,10 +183,15 @@ export function PhonemeSidebar({
                   <span className="tile-order">{String(item.order).padStart(2, '0')}</span>
                   <span className="tile-symbol">{item.symbol}</span>
                   <span className="tile-meta">
-                    {record.completed ? (
-                      <CheckCircle2 size={12} className="tile-check" />
-                    ) : record.mistakeCount > 0 ? (
-                      <span className="tile-dot review-dot" title="待巩固" />
+                    {record.mistakeCount > 0 ? (
+                      <span
+                        className="tile-dot review-dot"
+                        title={`待巩固 · 连续答对 ${CONSOLIDATE_THRESHOLD} 次自动移出（已连对 ${record.consecutiveCorrect}/${CONSOLIDATE_THRESHOLD}）`}
+                      />
+                    ) : record.completed ? (
+                      <span title="已掌握">
+                        <CheckCircle2 size={12} className="tile-check" />
+                      </span>
                     ) : (
                       <span className="tile-dot" />
                     )}

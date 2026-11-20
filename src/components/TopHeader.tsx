@@ -1,4 +1,5 @@
 import { BookOpen, CalendarDays, Gamepad2, GitCompare, RotateCcw, Sparkles } from 'lucide-react';
+import { CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
 import type { AppTab } from '../types/phonics';
 
 interface TopHeaderProps {
@@ -72,7 +73,10 @@ export function TopHeader({
             </div>
           </div>
 
-          <div className="stat-pill stat-hide-mobile" title="测验中答错过的待巩固音标">
+          <div
+            className="stat-pill stat-hide-mobile"
+            title={`测验中答错过的音标，连续答对 ${CONSOLIDATE_THRESHOLD} 次后自动移出待巩固`}
+          >
             <span className="stat-label">待巩固</span>
             <strong>{needReviewCount} 音</strong>
           </div>
