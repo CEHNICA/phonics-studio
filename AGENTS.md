@@ -168,6 +168,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:record` | 录音链路：AudioContext 用户手势内 resume、MediaRecorder 按片录制、分析模块预取、非 HTTPS 提示可操作、动态 import 带 catch（12 项） |
 | `npm run check:motion` | 动效：无 infinite 无限动画、存在 `prefers-reduced-motion` 降级、动画类全被覆盖、forwards 终态同时 `display:none`（4 项） |
 | `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（29 项） |
+| `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
@@ -179,7 +180,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:role-e2e; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -207,4 +208,7 @@ git add -A; git commit -m "..."; git push origin main
 - `pumpRef.current = pumpPreloadQueue` 这种**渲染期写 ref** 会被 oxlint 判 `react(refs)` 警告，且 StrictMode 双渲染下时序不可靠 —— 一律放 `useEffect` 里。
 - **UI 里 pending 必须排在 playing 前面**（2026-11 已修）：`useAudioPlayer` 的 `setPlayingId` 是在 `play()` **之前**调用的，所以只要点了 `isPlayingCurrentAudio` 立刻为 true。把「正在播放...」写在「加载中...」前面，pending 反馈就永远显示不出来 —— 弱网下用户点了没声、按钮却说在播。`npm run check:audio` 里有两条守护断言专门盯这个顺序（且断言前会把源码空白归一化，避免 JSX 多行造成假阳性）。
 - Lucide 图标组件不接受 `title` prop（TS2322），要 tooltip 得外包 `<span title=...>`。
+- **Playwright 的 JS API 和 Python API 不是一套东西** —— JS 里是 `page.$()` / `page.locator()` / `page.$$eval()` / `element.textContent()`；`page.querySelector()` / `context.new_page()` 在 JS 里根本不存在（那是 Python 的写法）。写 E2E 前先照着 `scripts/e2e-role-ui.cjs` 的写法抄，别凭记忆写。
+- **别用 PowerShell 批量正则改 JS 脚本** —— 双引号里的 `$(` 会被当子表达式吃掉，`page.$('.x')` 直接被改坏成 `page..x`，语法全崩。要改就用 edit/write 工具重写整个文件。
+- **仓库里没有 playwright 依赖** —— `scripts/e2e-role-ui.cjs` 自己会去找全局 `node_modules`（含 `NODE_PATH`），找不到就报错退出（exit 2），不会静默跳过。
 - `@vue-macros/nuxt` 那类 reactivity transform 下 `$ref` 变量在 script 里**不能写 `.value`**（静默 undefined）。
