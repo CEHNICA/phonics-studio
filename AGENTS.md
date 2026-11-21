@@ -99,6 +99,21 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 改完必须 `npm run check:js` **9/9 通过**再提交。
 
+### 改录音前必读
+
+录音链路的**逻辑**在移动端视口下实测是通的（真人读 `/iː/` 拿 99 分），但**真机环境**有四个 Chromium 测不出的坑：
+
+1. **iOS Safari 的 AudioContext 必须在用户手势里 resume。** 无手势创建会停在 `suspended`，此时 `decodeAudioData` 拿不到有效音频 → 表现为「录完没声音」+ 提示「只检测到环境背景声，请靠近麦克风清晰读一遍再试试哦」。修法：`src/utils/audio-context.ts` 的 `resumeSharedAudioContext()`，在 `startRecording` 里（用户手势的同步栈内）调用。
+
+   **别为了激活 context 去 import `pronunciation-analyzer`** —— 那模块 78 KB（含 48 音素模板表）。所以 context 管理单独抽成 `src/utils/audio-context.ts`，两边共用同一个实例。
+2. **`MediaRecorder.start()` 必须带 timeslice**（`start(250)`）。不切片时移动端长录音会丢尾段。
+3. **分析模块要提前预取**。录音开始时就 `import('../utils/pronunciation-analyzer')`，录完立刻出分，不用干等一次下载。
+4. **非 HTTPS（`isSecureContext` 为假）浏览器直接禁用麦克风**。提示必须给出可操作方案（换线上 https 地址 / localhost），只写「请在电脑端打开」等于在手机上把路堵死。
+
+**动态 import 必须带 `.catch()`** —— 链式写法 `import(...).then(...).catch(...)` 的 catch 在链尾，同样能兜住整条链。别只判「紧邻 import 的 catch」，那是假阳性。
+
+改完必须 `npm run check:record` **12/12 通过**再提交。
+
 ### 体检器（尺子）
 
 | 命令 | 管什么 |
@@ -107,10 +122,11 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:audio` | 音频数量/版本/体积预算、卡片词与例词全覆盖、路径版本化、预加载并发上限、`pendingKey` 存在、UI 里 pending 优先级（16 项） |
 | `npm run check:cards` | 卡片图数量/版本/体积预算、旧 PNG 已清、catalog 路径版本化、**真读 WebP 头验像素尺寸与宽高比**（10 项） |
 | `npm run check:js` | 首屏 JS 总量/单 chunk 预算、chunk 数、非首屏组件是否拆出且不进首屏、首屏源码清单、**浮层条件渲染**、**预取延迟 ≥1500ms**（9 项） |
+| `npm run check:record` | 录音链路：AudioContext 用户手势内 resume、MediaRecorder 按片录制、分析模块预取、非 HTTPS 提示可操作、动态 import 带 catch（12 项） |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
-改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 11/11 通过**再提交；改音频后 **`npm run check:audio` 必须 16/16 通过**再提交；改卡片图后 **`npm run check:cards` 必须 10/10 通过**再提交；动分包/运行时后 **`npm run check:js` 必须 9/9 通过**再提交。
+改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 11/11 通过**再提交；改音频后 **`npm run check:audio` 必须 16/16 通过**再提交；改卡片图后 **`npm run check:cards` 必须 10/10 通过**再提交；动分包/运行时后 **`npm run check:js` 必须 9/9 通过**再提交；动录音链路后 **`npm run check:record` 必须 12/12 通过**再提交。
 
 **每加一条守护断言，都要实测退回验证**：把被守护的写法改回旧样子，确认体检器**精确红在自己那条**、其余全绿。断言本身也要验 —— 本轮就抓到过「只判有没有 `setTimeout`」的假阳性（把延迟写成 0 照样绿），已改成校验延迟值本身。
 
@@ -118,7 +134,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -131,6 +147,8 @@ git add -A; git commit -m "..."; git push origin main
 ### 已知的坑
 
 - **ffmpeg 重编码丢音轨不报错** —— 只写 `-c:v libx264`（或带 `-an`）时，音轨会被整个丢掉，画面照播但一点声音没有，ffmpeg 退出码还是 0。**每次重编码后必须 probe 文件**，或直接依赖 `npm run check:video` 的音轨断言。
+- **iOS Safari 的 AudioContext 会停在 suspended** —— 无用户手势创建/不 resume，解码拿不到音频，表现为「录完没声音」。见上面「改录音前必读」。
+- **别在文件里搜 `import(...)` 就断言「已预取」** —— `onstop` 回调里的链式 import 在语法位置上就位于 `recorder.start()` 之前，会让断言假绿。唯一可靠特征是「独立语句 + 紧跟 `.catch(`」。同理，「紧邻 import 的 catch」也不成立，链式 catch 在链尾。
 - **阿里 CDN 不压 `.js`**（HTML/CSS 会压，JS 一律不压）—— 见上面「改首屏 JS 前必读」。JS 体积就是国内下载时间，只能靠少加载来降。
 - **React.lazy 的组件必须条件渲染** —— 只包 lazy 不够，被渲染就会拉 chunk。首屏照样多请求。
 - **弱网下别急着预取** —— 预取和首屏媒体抢带宽，实测能把卡片图拖慢 2 倍多。

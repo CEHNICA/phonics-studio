@@ -4,6 +4,7 @@
  */
 
 import rawTemplates from '../data/phoneme-templates.json' with { type: 'json' };
+import { getSharedAudioContext } from './audio-context.ts';
 import {
   applyHighPassFilter,
   computeFrameRms,
@@ -100,22 +101,27 @@ const PHONEME_TEMPLATE_BY_ID = new Map<string, DecodedTemplateEntry>(
   PHONEME_TEMPLATE_ENTRIES.map((entry) => [entry.id, entry]),
 );
 
-let analyzerAudioContext: AudioContext | null = null;
-
 function getAnalyzerAudioContext(): AudioContext {
-  if (typeof window === 'undefined') {
-    throw new Error('AudioContext is only available in browser');
+  // 与录音链路共用同一个 context，避免重复创建（iOS 上重复创建还可能拿到 suspended 的）
+  return getSharedAudioContext();
+}
+
+/**
+ * 在用户手势内激活 AudioContext。
+ *
+ * iOS Safari 的规矩：AudioContext 必须在用户手势里创建或 resume，否则会一直停在
+ * suspended 状态。suspended 的 context 做 decodeAudioData 会偶发返回空/损坏的 buffer，
+ * 表现出来就是「录完没声音 / 分析不出来」。所以必须在点录音那一刻调用。
+ */
+export async function resumeAnalyzerAudioContext(): Promise<void> {
+  try {
+    const ctx = getAnalyzerAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+  } catch {
+    // 激活失败不阻断录音：后续 decodeAudioData 仍会尝试，走 catch 退回原始音频
   }
-  const AudioCtx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) {
-    throw new Error('Web Audio API is not supported');
-  }
-  if (!analyzerAudioContext) {
-    analyzerAudioContext = new AudioCtx();
-  }
-  return analyzerAudioContext;
 }
 
 function clamp(val: number, min: number, max: number): number {

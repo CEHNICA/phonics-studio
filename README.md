@@ -194,6 +194,21 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 
 量化对照与约束由 `scripts/check-audio-perf.ts` 把关（`npm run check:audio`，16 项断言），涉及音频素材或播放逻辑时必跑。
 
+## 手机版录音（跟读自检）
+
+录音链路在移动端视口下实测是通的（真人读 `/iː/` 能拿 99 分），但**真机上有几个 Chromium 测不出的坑**，全部已修：
+
+| 问题 | 根因 | 修法 |
+| --- | --- | --- |
+| **录完没声音**，提示「只检测到环境背景声」 | iOS Safari 的 AudioContext 必须在**用户手势**里创建/恢复，否则停在 `suspended`；suspended 的 context 做 `decodeAudioData` 拿不到有效音频 | 点录音那一刻在用户手势的同步栈里 `ctx.resume()`（`src/utils/audio-context.ts`） |
+| 长录音丢尾段 | `MediaRecorder.start()` 不切片，移动端长时间录音会丢最后一段 | 改成 `recorder.start(250)`，每 250ms 落一片 |
+| 录完要干等一次下载 | 78 KB 的分析模块等到录完才 `import` | 录音开始时就预取该 chunk，录完立刻出分 |
+| 手机上点录音像坏了 | 局域网 HTTP 下浏览器直接禁用麦克风，提示却只说「请在电脑端打开」 | 提示改成给出可操作方案（换线上 https 地址 / localhost） |
+
+`scripts/check-record.ts`（`npm run check:record`，12 项断言）逐条守住这些约束，改录音代码必跑。
+
+**怎么证明「录完有没有声音」**（别只信代码看着对）：工作区 `破甲\_tools\record_ctx_contrast.js` 会**伪造一个 suspended 的 AudioContext**（`state` 恒为 suspended，`decodeAudioData` 返回空 buffer），复现 iOS 的真实行为。有修复时：resume 被调用 → 3 次解码全在 running → 拿到分数；退回修复时：3 次解码全在 suspended → 分数 `--` → 提示「只检测到环境背景声」。这就是用户看到的症状。
+
 ## 卡片图片加载性能
 
 手绘卡片图是首屏最大的单项负载，同样受 `Cache-Control: no-store` 与 CDN 边缘 30 天缓存约束。

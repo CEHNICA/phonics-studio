@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteRecording, loadRecording, saveRecording } from '../utils/recording-store';
+import { resumeSharedAudioContext } from '../utils/audio-context';
 
 export interface VoiceTrimInfo {
   leadingTrimmedSec: number;
@@ -127,8 +128,13 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
 
   const startRecording = useCallback(async () => {
     if (typeof window !== 'undefined' && !window.isSecureContext) {
+      // 局域网 HTTP 下浏览器直接禁用麦克风，这不是录音代码的锅。
+      // 提示必须说清「怎么才能录」，否则用户在手机上试半天以为功能坏了。
+      const isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
       setErrorMessage(
-        '手机通过局域网 HTTP 访问时浏览器会禁用麦克风；听音、卡片、口型视频与闯关均可正常使用，如需录音请在电脑端打开。',
+        isLocalhost
+          ? '浏览器只在 HTTPS（或 localhost）下允许使用麦克风。请改用线上 https 地址打开，或在电脑上部署一个 https 版本。'
+          : '当前是 http 局域网地址，浏览器会禁用麦克风（只有 https 或 localhost 才行）。请改用线上 https 地址打开：https://5p3wt4cgcivtd.space.mcode.cn 。听音、卡片、口型视频与闯关在当前地址都能正常使用。',
       );
       return;
     }
@@ -144,6 +150,13 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
 
     try {
       clearRecording();
+
+      // 必须在用户手势的同步栈里激活 AudioContext（iOS Safari 否则一直 suspended，
+      // decodeAudioData 会偶发返回空 buffer，表现为「录完没声音」）。
+      // 同时预取分析模块，录完立刻就能算分，不用干等 78KB chunk 下载。
+      void resumeSharedAudioContext();
+      void import('../utils/pronunciation-analyzer').catch(() => undefined);
+
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -178,7 +191,6 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
           chunksRef.current.push(event.data);
         }
       };
-
       recorder.onstop = () => {
         setIsRecording(false);
         stopStream();
@@ -236,7 +248,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
 
       };
 
-      recorder.start();
+      recorder.start(250);
       setIsRecording(true);
       setErrorMessage(null);
     } catch {
