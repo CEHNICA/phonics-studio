@@ -17,6 +17,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CARD_INSTRUCTION, LEARNING_STEPS, STEP_LISTEN_CIRCLE, STEP_READ_ALONG } from '../src/data/learning-flow.ts';
 
 const ROOT = process.cwd();
 const STUDIO = join(ROOT, 'src', 'components', 'CardStudio.tsx');
@@ -46,20 +47,35 @@ function stripComments(text: string): string {
 const clean = stripComments(src);
 
 /* ---------- 1. 两步编号存在（第 1 步 = 听一遍 + 圈一圈） ---------- */
+/**
+ * 步骤文案不在组件里写死，而是从 `src/data/learning-flow.ts` 取 ——
+ * 所以这里断言的是「组件用了常量」+「常量本身内容对」，而不是 grep 源码字面量。
+ * （grep 字面量是上一轮的写法，组件一改成常量就假红了。）
+ */
 check(
   '第 1 步编号徽标是「听一遍，圈一圈」',
-  clean.includes('step-num">1<') && /听一遍[，,]\s*圈一圈/.test(clean),
-  /听一遍[，,]\s*圈一圈/.test(clean) ? '第 1 步 = 听一遍，圈一圈' : '找不到「听一遍，圈一圈」',
+  clean.includes('step-num">1<') &&
+    clean.includes('STEP_LISTEN_CIRCLE') &&
+    STEP_LISTEN_CIRCLE.includes('听一遍') &&
+    STEP_LISTEN_CIRCLE.includes('圈一圈'),
+  `组件用常量=${clean.includes('STEP_LISTEN_CIRCLE')}，常量=「${STEP_LISTEN_CIRCLE}」`,
 );
 check(
   '第 2 步编号徽标是「跟读一遍」',
-  clean.includes('step-num">2<') && clean.includes('跟读一遍'),
-  clean.includes('跟读一遍') ? '第 2 步 = 跟读一遍' : '找不到「跟读一遍」',
+  clean.includes('step-num">2<') &&
+    clean.includes('STEP_READ_ALONG') &&
+    STEP_READ_ALONG.includes('跟读一遍'),
+  `组件用常量=${clean.includes('STEP_READ_ALONG')}，常量=「${STEP_READ_ALONG}」`,
 );
 check(
   '没有第 3 步（圈出不是独立一步）',
   !clean.includes('step-num">3<'),
   clean.includes('step-num">3<') ? '还有第 3 步徽标' : '只有两步',
+);
+check(
+  '步骤一共两步',
+  LEARNING_STEPS.length === 2,
+  `${LEARNING_STEPS.length} 步`,
 );
 
 /* ---------- 2. 物理顺序：卡片 → 圈出区 → 跟读区 ---------- */
@@ -160,8 +176,8 @@ check(
 /* ---------- 6. 圈出区归第 1 步（文案点明它属于「听一遍，圈一圈」） ---------- */
 check(
   '第 1 步提示里点明包含「圈」',
-  /听一遍[，,]\s*圈一圈/.test(clean) && /圈出|圈一圈/.test(clean),
-  '第 1 步文案已包含圈出',
+  STEP_LISTEN_CIRCLE.includes('圈') && /圈出|圈一圈/.test(CARD_INSTRUCTION),
+  `第 1 步=「${STEP_LISTEN_CIRCLE}」，卡片印刷语=「${CARD_INSTRUCTION}」`,
 );
 check(
   '圈出区标题仍是「圈出读起来最顺口的那个词」',

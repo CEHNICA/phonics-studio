@@ -96,7 +96,7 @@ export const CARD_SLOT_DATA: {
     ],
     "diphthong-ai": [
       {
-        "cx": 194,
+        "cx": 193,
         "cy": 495,
         "rx": 50,
         "ry": 34
@@ -348,7 +348,7 @@ export const CARD_SLOT_DATA: {
         "ry": 34
       },
       {
-        "cx": 859,
+        "cx": 858,
         "cy": 495,
         "rx": 61,
         "ry": 34
@@ -816,9 +816,9 @@ export const CARD_SLOT_DATA: {
     ],
     "tr": [
       {
-        "cx": 193,
+        "cx": 194,
         "cy": 498,
-        "rx": 70,
+        "rx": 71,
         "ry": 31
       },
       {

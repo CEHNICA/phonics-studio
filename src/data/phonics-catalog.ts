@@ -86,7 +86,7 @@ export const PHONEMES: PhonemeItem[] = dataset.phonemes.map((item, index) => {
     // 文件名带版本号是为了绕开阿里 CDN 对旧文件的 30 天边缘缓存
     // （源站 Cache-Control: no-store 只管浏览器，管不了 CDN）。
     // 尺寸与宽高比和原图严格一致，卡片上的单词热区是按百分比定位的，不能变比例。
-    cardSrc: `/assets/cards/${item.id}.v2.webp`,
+    cardSrc: `/assets/cards/${item.id}.v3.webp`,
     localAudioSrc: `/assets/sound/${item.id}.v2.mp3`,
     // NOTE: v3 = 640x360 重编码版 + 保留示范发音音轨（AAC 32kHz 单声道）。
     // v2 那批重编码时把音轨砍掉了，用户点播放「没声音」，v3 补回。

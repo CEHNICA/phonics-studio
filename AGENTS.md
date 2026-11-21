@@ -183,19 +183,45 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 ### 改「学习流程顺序」前必读
 
-卡片上印的是「听一遍，跟读一遍，再圈出读起来最顺口的那个词」，但**网站上是两步**，别照着印刷语做成三步：
+卡片上印的是「听一遍、**圈一圈**，再跟读一遍」，网站上是**两步**，别照着旧的三步式做成三步：
 
 1. **第 1 步 = 听一遍 + 圈一圈**。徽标文案是「听一遍，圈一圈」，提示「点卡片听发音，把读起来最顺口的那个词圈出来」。**圈出是第 1 步的一部分，不是独立的第 3 步**。
 2. **物理顺序：卡片 → 圈出区 → 跟读区**。跟读是最后一步。
 3. **跟读区内部也是两步**：先放「① 先听原声 → ② 跟我读一遍」提示行，**第一个按钮必须是「先听一遍原声」**，录音按钮排在它后面。旧的「只听原声」按钮已删除，别加回来。
 4. **顺序有两条独立的尺子**：`check:flow` 看源码 DOM 顺序，`e2e-learning-flow.ts` 看浏览器里的**实际像素位置**和按钮顺序。DOM 对 ≠ 用户看到的对（CSS 也能改视觉顺序）。
 
+**所有步骤文案都从 `src/data/learning-flow.ts` 取**（`STEP_LISTEN_CIRCLE` / `STEP_READ_ALONG` / `CARD_INSTRUCTION`），组件里不写死字面量。改文案改那个文件。
+
 **坑（尺子自身的坑，本轮踩到）**：
 
 - `scripts/check-learning-flow.ts` 里所有「某文案不该出现 / 该出现在第几个」的断言都必须在**剥掉注释后的源码**上做。JSX 注释里也写着按钮文案，全文 grep 会把注释当成真按钮 —— 改坏按钮文案尺子照样全绿（假绿）。尺子里有 `stripComments()` 处理这个。
 - **「徽标在 X 之前」这类顺序断言要加「徽标存在才判」的守卫**。否则「删掉徽标」这个缺陷会同时红在「有编号徽标」和「徽标在卡片之前」两条上，逐项退回时对不上号（用户铁律：每条缺陷精确红在自己那条）。存在性归一条、顺序归另一条。
+- **组件里的文案改成常量后，尺子不能再 grep 字面量** —— 要 `import` 常量真跑，否则尺子假红。
 
-改完必须 `npm run check:flow` **16/16 通过** + `node scripts/e2e-learning-flow.ts` **17/17 通过**再提交。
+改完必须 `npm run check:flow` **17/17 通过** + `node scripts/e2e-learning-flow.ts` **17/17 通过**再提交。
+
+### 改「卡片印刷语」前必读
+
+卡片图上**印着**一行教学指令。它和网站步骤必须永远一致（孩子照着卡片做，网站不能是另一套）。
+
+1. **文案只有一个源**：`src/data/learning-flow.ts` 的 `CARD_INSTRUCTION`（= 卡片上印的那句）+ `LEARNING_STEPS`（网站步骤）。`scripts/reprint_card_instruction.py` 的 `NEW` 必须与它**一字不差**，`npm run check:print` 会查。
+2. **改印刷语要重印 48 张卡**：擦掉旧句那一行，用同样的字体/字号/左边界/垂直中心印新句。**换文件名**（`.v2` → `.v3`）—— 阿里 CDN 边缘缓存 30 天，不换名字线上不生效。
+   ```bash
+   python scripts/reprint_card_instruction.py --cards public/assets/cards --out public/assets/cards
+   node scripts/derive-card-word-slots.ts --write src/data/card-word-slots.ts   # 图片换了版本，槽位要重推
+   npm run check:print && npm run check:circle && npm run check:cards
+   ```
+3. **字体字号是校准出来的**：用**原句复现**比对（msyhbd.ttc 24 号，复现宽度 552 vs 原图 547，差 0.9%，叠图肉眼一致）。别随手换字体/字号。
+4. **印刷语的几何实测值**（1050×623 坐标系）：背景 `#F7F4EE`、墨迹行 y=246~271、左边界 x=39、字色 `#2A223D`、字高 26px、旧句宽 547px、新句宽 336px。`check:print` 用**墨迹宽度**当判据（旧句 547 会被抓住）。
+5. **擦除要保留渐变**：逐行用「同行左侧无墨迹区平均色」填充，别整块填死色 —— 否则留下一块明显补丁。
+
+**坑**：
+
+- **`derive-card-word-slots.ts` 的选行判据已改成「墨迹密度最高」**。原来用「带高最大」，ch 卡的**插画带**（378~442，高 65）比英文词行（471~519，高 49）还高，于是挑中插画、词槽全错。词行密度 15.8%~25.3%，插画带只有 3.2%~8.0%，差一个数量级。`check:circle` 有守护断言：**48 张卡的词行中心必须落在 460~530**。
+- **PIL 存 webp 的有损程度比 ffmpeg `-q:v` 重**（ffmpeg 的 q:v 82 会被 clamp 到 63，接近无损）。影响素材细节时优先走「PIL 处理 → 存 PNG → ffmpeg 转 webp」。
+- **中途 stop 掉退回验证脚本会留下脏仓库** —— 脚本靠 `finally` 还原文件，被强杀时不还原，下一轮跑会报莫名其妙的失败。中断后先看 `git status`。
+
+改完必须 `npm run check:print` **11/11 通过**再提交。
 
 ### 体检器（尺子）
 
@@ -211,8 +237,9 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
 | `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（23 项） |
 | `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
-| `npm run check:flow` | 「学习流程顺序」：**只有两步**（1 听一遍+圈一圈 → 2 跟读一遍）、没有第 3 步、圈出区紧跟卡片、跟读区在最后、徽标位置、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（16 项） |
+| `npm run check:flow` | 「学习流程顺序」：**只有两步**（1 听一遍+圈一圈 → 2 跟读一遍）、没有第 3 步、圈出区紧跟卡片、跟读区在最后、徽标位置、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（17 项） |
 | `npm run e2e:flow` | 上面那条尺子的**浏览器真机版**（Playwright，17 项）：徽标只有 2 个且从上到下、圈出区**视觉上**在跟读区上面、「先听一遍原声」确实是跟读区第一个按钮、搬了位置后点词仍能画圈并取消 |
+| `npm run check:print` | 「卡片印刷语 ↔ 网站步骤」：印刷语含每步关键词（**每个关键词一条断言**）、关键词顺序一致、不含旧三步式、重印脚本与常量一字不差、48 张 .v3.webp、catalog 指 v3、**实际印出来的墨迹宽度/高度/左边距在区间**（11 项） |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
@@ -224,7 +251,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run check:print; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```

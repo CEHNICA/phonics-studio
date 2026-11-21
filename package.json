@@ -13,6 +13,7 @@
     "check:cards": "node scripts/check-cards-perf.ts",
     "check:circle": "node scripts/check-card-circle.ts",
     "check:flow": "node scripts/check-learning-flow.ts",
+    "check:print": "node scripts/check-card-print.ts",
     "e2e:flow": "node scripts/e2e-learning-flow.ts",
     "check:js": "node scripts/check-js-budget.ts",
     "preview": "vite preview",

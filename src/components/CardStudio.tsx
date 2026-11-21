@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PHONEME_MAP, PHONEMES, getRelatedConfusableIds } from '../data/phonics-catalog';
 import { CARD_SLOT_DATA } from '../data/card-word-slots';
+import { STEP_LISTEN_CIRCLE, STEP_READ_ALONG } from '../data/learning-flow';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
@@ -427,7 +428,7 @@ export function CardStudio({
             {/* 第 1 步：听发音 */}
             <div className="step-badge">
               <span className="step-num">1</span>
-              <span className="step-text">听一遍，圈一圈</span>
+              <span className="step-text">{STEP_LISTEN_CIRCLE}</span>
               <span className="step-subhint">点卡片听发音，把读起来最顺口的那个词圈出来</span>
             </div>
             <div className="illustrated-card-frame">
@@ -600,7 +601,7 @@ export function CardStudio({
             {/* 第 2 步：听完就跟读（先听原声，再跟读） */}
             <div className="step-badge">
               <span className="step-num">2</span>
-              <span className="step-text">跟读一遍</span>
+              <span className="step-text">{STEP_READ_ALONG}</span>
               <span className="step-subhint">先听一遍原声，再开口跟读</span>
             </div>
             <div className="lab-card recorder-center-card">

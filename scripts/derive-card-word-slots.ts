@@ -106,12 +106,34 @@ export function analyzeCard(buf: Buffer): { bands: number[]; groups: Box[] } {
     return { bands, groups: [] };
   }
 
-  // 英文词的字高明显大于音标行 → 取「带高最大」的那条带；等高时取更靠下的那条
+  /**
+   * 选词行带。
+   *
+   * 踩过的坑：原来用「带高最大」来挑词行 —— 但 ch 卡的**插画带**（378~442，高 65）
+   * 比英文词行（471~519，高 49）还高，于是挑中插画，词槽全错。
+   *
+   * 正确判据是**墨迹密度**：英文词是实心大字，笔画密（实测 15.8%~25.3%），
+   * 插画是稀疏色块（3.2%~8.0%），音标行更细（5.2%~5.8%）。
+   * 密度差一个数量级，不会认错。
+   */
+  const bandDensity = (y0: number, y1: number): number => {
+    let dark = 0;
+    for (let y = y0; y <= y1; y++) {
+      const off = y * CARD_W;
+      for (let x = 0; x < CARD_W; x++) if (buf[off + x] < DARK) dark++;
+    }
+    return dark / ((y1 - y0 + 1) * CARD_W);
+  };
+
   let wordBand: [number, number] = candidates[0];
+  let bestDensity = -1;
   let bestHeight = -1;
   for (const [y0, y1] of candidates) {
     const h = y1 - y0 + 1;
-    if (h >= bestHeight) {
+    const density = bandDensity(y0, y1);
+    // 先按密度选；密度完全相同才看带高（再相同取更靠下的）
+    if (density > bestDensity + 1e-9 || (Math.abs(density - bestDensity) <= 1e-9 && h > bestHeight)) {
+      bestDensity = density;
       bestHeight = h;
       wordBand = [y0, y1];
     }
@@ -207,11 +229,11 @@ function main() {
     console.error(`缺少卡片目录：${CARDS_DIR}`);
     process.exit(2);
   }
-  const files = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v2.webp')).sort();
+  const files = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v3.webp')).sort();
 
   if (profileArg >= 0) {
     const id = process.argv[profileArg + 1];
-    const file = join(CARDS_DIR, `${id}.v2.webp`);
+    const file = join(CARDS_DIR, `${id}.v3.webp`);
     const buf = decodeGray(file, ffmpeg);
     const { bands, groups } = analyzeCard(buf);
     console.log(`== ${id} 词块 =`);
@@ -233,7 +255,7 @@ function main() {
     const buf = decodeGray(join(CARDS_DIR, f), ffmpeg);
     const { groups } = analyzeCard(buf);
     const picked = pickThree(groups);
-    perCard.push({ id: f.replace('.v2.webp', ''), groups: picked, buf, coverage: [] });
+    perCard.push({ id: f.replace('.v3.webp', ''), groups: picked, buf, coverage: [] });
     if (picked.length !== 3) {
       console.error(`[WARN] ${f} 只定位到 ${picked.length} 个词块`);
     }

@@ -45,8 +45,8 @@ const cards = Object.keys(CARD_SLOT_DATA.cards);
  */
 const cardFileIds = existsSync(CARDS_DIR)
   ? readdirSync(CARDS_DIR)
-      .filter((f) => f.endsWith('.v2.webp'))
-      .map((f) => f.replace('.v2.webp', ''))
+      .filter((f) => f.endsWith('.v3.webp'))
+      .map((f) => f.replace('.v3.webp', ''))
       .sort()
   : [];
 const missingSlots = cardFileIds.filter((id) => !CARD_SLOT_DATA.cards[id]);
@@ -112,12 +112,14 @@ if (!ffmpeg || skipAssetLayer) {
   );
   skip('圈覆盖率 ≥ 85%（需要 ffmpeg）', !ffmpeg ? '本机找不到 ffmpeg，跳过素材层实测' : 'CIRCLE_CHECK_FAST=1 快模式，跳过素材层实测');
 } else {
-  const files = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v2.webp')).sort();
+  const files = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v3.webp')).sort();
   const drift: string[] = [];
   const lowCoverage: string[] = [];
+  /** 选中的词行带中心不在版式区间 → 多半是把插画带当成了词行（算法缺陷） */
+  const offRow: string[] = [];
   let minCov = 1;
   for (const f of files) {
-    const id = f.replace('.v2.webp', '');
+    const id = f.replace('.v3.webp', '');
     const buf = decodeGray(join(CARDS_DIR, f), ffmpeg);
     const { groups } = analyzeCard(buf);
     const picked = pickThree(groups);
@@ -126,6 +128,16 @@ if (!ffmpeg || skipAssetLayer) {
       continue;
     }
     const committed = CARD_SLOT_DATA.cards[id];
+    /**
+     * 守护：词行必须落在版式固定区间。
+     * 卡片是同一套模板印的，英文词行固定在 y≈471~519（中心 495 上下）。
+     * 一旦选行算法退化成「取带高最大」，ch 这类卡会挑中更高的**插画带**，
+     * 圈就画到插画上去了 —— 这条断言专门盯这个。
+     */
+    const rowCenter = (picked[0].y0 + picked[0].y1) / 2;
+    if (rowCenter < 460 || rowCenter > 530) {
+      offRow.push(`${id}(词行中心 ${Math.round(rowCenter)})`);
+    }
     picked.forEach((g, i) => {
       const cx = Math.round((g.x0 + g.x1) / 2);
       const cy = Math.round((g.y0 + g.y1) / 2);
@@ -141,6 +153,11 @@ if (!ffmpeg || skipAssetLayer) {
     '槽位坐标与素材实测一致（误差 ≤ 4px）',
     drift.length === 0,
     drift.length === 0 ? `48 张 × 3 槽全部一致` : `${drift.length} 处偏差：${drift.slice(0, 3).join('；')}`,
+  );
+  check(
+    '词行落在版式固定区间（选行算法没把插画带当成词行）',
+    offRow.length === 0,
+    offRow.length === 0 ? '48 张词行中心都在 460~530' : `${offRow.length} 张越界：${offRow.slice(0, 3).join('；')}`,
   );
   check(
     '圈覆盖率 ≥ 85%（圈真的套在词上）',
@@ -249,7 +266,7 @@ check(
 /* ---------- 6. 素材体积没有被这一轮弄大 ---------- */
 if (existsSync(CARDS_DIR)) {
   let total = 0;
-  for (const f of readdirSync(CARDS_DIR).filter((x) => x.endsWith('.v2.webp'))) {
+  for (const f of readdirSync(CARDS_DIR).filter((x) => x.endsWith('.v3.webp'))) {
     total += statSync(join(CARDS_DIR, f)).size;
   }
   check(

@@ -122,7 +122,7 @@ async function main() {
   check('有 3 个候选词（A/B/C）', chips.length === 3, `实际 ${chips.length}`);
 
   const cardSrc = (await page.getAttribute('.illustrated-card-img', 'src')) ?? '';
-  const cardId = cardSrc.match(/cards\/(.+)\.v2\.webp/)?.[1] ?? '';
+  const cardId = cardSrc.match(/cards\/(.+)\.v3\.webp/)?.[1] ?? '';
   check('能从卡片图 src 推出音标 id', Boolean(cardId), cardSrc);
   const slots = CARD_SLOT_DATA.cards[cardId] ?? CARD_SLOT_DATA.fallback;
 

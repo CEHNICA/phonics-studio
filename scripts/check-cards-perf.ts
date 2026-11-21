@@ -41,9 +41,9 @@ if (!existsSync(CARDS_DIR)) {
     legacy.length === 0 ? '' : `残留 ${legacy.length} 张：${legacy.slice(0, 3).join(', ')}`,
   );
   check(
-    '卡片图全部为 .v2.webp 版本',
-    files.every((f) => f.endsWith('.v2.webp')),
-    files.filter((f) => !f.endsWith('.v2.webp')).slice(0, 3).join(', '),
+    '卡片图全部为 .v3.webp 版本',
+    files.every((f) => f.endsWith('.v3.webp')),
+    files.filter((f) => !f.endsWith('.v3.webp')).slice(0, 3).join(', '),
   );
 
   let total = 0;
@@ -71,11 +71,11 @@ if (!existsSync(CARDS_DIR)) {
   );
 }
 
-/* ---------- 2. 引用层：路径必须指向 .v2.webp，且不能带 query ---------- */
+/* ---------- 2. 引用层：路径必须指向 .v3.webp，且不能带 query ---------- */
 const catalogSrc = existsSync(CATALOG) ? readFileSync(CATALOG, 'utf8') : '';
 check(
-  'catalog 的 cardSrc 指向 .v2.webp',
-  /cardSrc:\s*`\/assets\/cards\/\$\{item\.id\}\.v2\.webp`/.test(catalogSrc),
+  'catalog 的 cardSrc 指向 .v3.webp',
+  /cardSrc:\s*`\/assets\/cards\/\$\{item\.id\}\.v3\.webp`/.test(catalogSrc),
   catalogSrc ? '' : '缺少 src/data/phonics-catalog.ts',
 );
 check(
@@ -126,7 +126,7 @@ function readWebpSize(file: string): { width: number; height: number } | null {
 }
 
 if (existsSync(CARDS_DIR)) {
-  const webps = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v2.webp'));
+  const webps = readdirSync(CARDS_DIR).filter((f) => f.endsWith('.v3.webp'));
   const wrongSize: string[] = [];
   const wrongRatio: string[] = [];
   let parsed = 0;
