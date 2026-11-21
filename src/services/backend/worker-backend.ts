@@ -114,6 +114,8 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
             username: input.username,
             password: input.password,
             displayName: input.displayName,
+            role: input.role ?? 'student',
+            teacherCode: input.teacherCode,
           }),
         },
         '注册失败',

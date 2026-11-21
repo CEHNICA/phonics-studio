@@ -5,7 +5,7 @@
  * 不给生产代码留测试专用后门。
  */
 
-import type { AccountInfo, Membership } from './types';
+import type { AccountInfo, AccountKind, Membership } from './types';
 
 const SESSION_KEY = 'phonics-studio-account-session-v1';
 
@@ -56,13 +56,6 @@ export function parseSession(raw: string | null): AccountSession | null {
     if (!parsed.account || typeof parsed.account.username !== 'string') {
       return null;
     }
-    const account: AccountInfo = {
-      username: parsed.account.username,
-      displayName:
-        typeof parsed.account.displayName === 'string' && parsed.account.displayName.trim()
-          ? parsed.account.displayName
-          : parsed.account.username,
-    };
     let membership: Membership | null = null;
     const rawMembership = parsed.membership;
     if (rawMembership && typeof rawMembership === 'object' && rawMembership.spaceId) {
@@ -71,11 +64,23 @@ export function parseSession(raw: string | null): AccountSession | null {
         spaceName: String(rawMembership.spaceName ?? '未命名班级'),
         role: rawMembership.role === 'owner' ? 'owner' : 'student',
         joinCode: typeof rawMembership.joinCode === 'string' ? rawMembership.joinCode : null,
-        memberName: String(rawMembership.memberName ?? account.username),
+        memberName: String(rawMembership.memberName ?? parsed.account.username),
         revoked: Boolean(rawMembership.revoked),
         spaceRevoked: Boolean(rawMembership.spaceRevoked),
       };
     }
+    // 身份：服务端给 teacher 就是 teacher；
+    // 老会话里没有 role 字段，但已经在班级里当 owner 的账号按老师处理
+    const role: AccountKind =
+      parsed.account.role === 'teacher' || membership?.role === 'owner' ? 'teacher' : 'student';
+    const account: AccountInfo = {
+      username: parsed.account.username,
+      displayName:
+        typeof parsed.account.displayName === 'string' && parsed.account.displayName.trim()
+          ? parsed.account.displayName
+          : parsed.account.username,
+      role,
+    };
     return {
       token: parsed.token,
       account,

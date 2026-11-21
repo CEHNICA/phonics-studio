@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CloudOff, Copy, LogOut, RefreshCw, Star, UserPlus, X } from 'lucide-react';
 import { PHONEME_MAP } from '../data/phonics-catalog';
 import type { BackendState, Membership } from '../services/backend/types';
+import type { AccountKind } from '../services/backend/types';
 import type { AccountSession } from '../services/backend/account-session';
 import { formatJoinCode } from '../services/backend/account-client';
 import type { QuizAttempt } from '../types/phonics';
@@ -21,7 +22,13 @@ interface UserDataPanelProps {
   authBusy: boolean;
   onSelectPhoneme: (phonemeId: string) => void;
   onSyncNow: () => void;
-  onRegister: (username: string, password: string, displayName: string) => void;
+  onRegister: (
+    username: string,
+    password: string,
+    displayName: string,
+    role: AccountKind,
+    teacherCode?: string,
+  ) => void;
   onLogin: (username: string, password: string) => void;
   onLogout: () => void;
   onChangePassword: (oldPassword: string, newPassword: string) => void;
@@ -86,6 +93,9 @@ export function UserDataPanel({
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [displayName, setDisplayName] = useState<string>('');
+  const [regRole, setRegRole] = useState<AccountKind>('student');
+  const [teacherCode, setTeacherCode] = useState<string>('');
+  const [formError, setFormError] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
   const [className, setClassName] = useState<string>('');
   const [creatingClass, setCreatingClass] = useState<boolean>(false);
@@ -110,6 +120,8 @@ export function UserDataPanel({
   }
 
   const isOwner = membership?.role === 'owner' && !membership?.revoked;
+  /** 账号身份：老师能建班，学生只能拿班级码加入 */
+  const isTeacher = session?.account.role === 'teacher';
   /** 被移出 / 班级被撤销时视为「不在班里」，可以重新输班级码 */
   const inClass = Boolean(membership && !membership.revoked && !membership.spaceRevoked);
   const classNotice = membership?.spaceRevoked
@@ -123,8 +135,14 @@ export function UserDataPanel({
       return;
     }
     if (mode === 'register') {
-      onRegister(username, password, displayName);
+      if (regRole === 'teacher' && !teacherCode.trim()) {
+        setFormError('注册老师账号要填教师邀请码');
+        return;
+      }
+      setFormError(null);
+      onRegister(username, password, displayName, regRole, teacherCode.trim() || undefined);
     } else {
+      setFormError(null);
       onLogin(username, password);
     }
   };
@@ -244,13 +262,21 @@ export function UserDataPanel({
           {session ? (
             <>
               <p className="user-data-sync-state">
-                {session.account.displayName}（{session.account.username}）
+                {session.account.displayName}（{session.account.username}）·{' '}
+                {isTeacher ? '老师' : '学生'}
               </p>
               <p className="user-data-sync-time">
                 {inClass
                   ? `已加入「${membership?.spaceName}」 · ${STATE_TEXT[backendState]}`
-                  : `还没进班级 · ${STATE_TEXT[backendState]}`}
+                  : `${isTeacher ? '还没建班级' : '还没加入班级'} · ${STATE_TEXT[backendState]}`}
               </p>
+              {!inClass && (
+                <p className="user-data-hint">
+                  {isTeacher
+                    ? '建一个班级，把班级码发给学生，他们的学习进度就能同步到云端。'
+                    : '向老师要一个班级码填到下面，进度就会同步到云端；现在这些进度只存在这台设备上。'}
+                </p>
+              )}
               {classNotice && <p className="user-data-code-error">{classNotice}</p>}
               {lastSyncedAt && (
                 <p className="user-data-sync-time">最近同步：{formatAttemptTime(lastSyncedAt)}</p>
@@ -307,7 +333,7 @@ export function UserDataPanel({
               {authError && <p className="user-data-code-error">{authError}</p>}
 
               <div className="user-data-action-row">
-                {!inClass && (
+                {!inClass && isTeacher && (
                   <button
                     type="button"
                     className="user-data-ghost-btn"
@@ -411,6 +437,55 @@ export function UserDataPanel({
               </div>
 
               {mode === 'register' && (
+                <>
+                  <div className="user-data-field">
+                    <label>我是</label>
+                    <div className="user-data-role-switch" role="radiogroup" aria-label="账号身份">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={regRole === 'student'}
+                        className={regRole === 'student' ? 'is-active' : ''}
+                        onClick={() => setRegRole('student')}
+                      >
+                        学生
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={regRole === 'teacher'}
+                        className={regRole === 'teacher' ? 'is-active' : ''}
+                        onClick={() => setRegRole('teacher')}
+                      >
+                        老师
+                      </button>
+                    </div>
+                  </div>
+                  {regRole === 'teacher' && (
+                    <div className="user-data-field">
+                      <label htmlFor="account-teacher-code">教师邀请码</label>
+                      <input
+                        id="account-teacher-code"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="向要建班的老师要"
+                        value={teacherCode}
+                        onChange={(event) => setTeacherCode(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            handleAuthSubmit();
+                          }
+                        }}
+                      />
+                      <p className="user-data-field-tip">
+                        只有拿到邀请码才能注册成老师账号、才能创建班级。
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {mode === 'register' && (
                 <div className="user-data-field">
                   <label htmlFor="account-display-name">姓名（可不填）</label>
                   <input
@@ -440,12 +515,19 @@ export function UserDataPanel({
                 />
               </div>
 
-              {authError && <p className="user-data-code-error">{authError}</p>}
+              {(formError || authError) && (
+                <p className="user-data-code-error">{formError ?? authError}</p>
+              )}
 
               <button
                 type="button"
                 className="user-data-primary-btn user-data-primary-btn-block"
-                disabled={authBusy || !username.trim() || !password}
+                disabled={
+                  authBusy ||
+                  !username.trim() ||
+                  !password ||
+                  (mode === 'register' && regRole === 'teacher' && !teacherCode.trim())
+                }
                 onClick={handleAuthSubmit}
               >
                 {authBusy ? '处理中…' : mode === 'register' ? '注册并登录' : '登录'}

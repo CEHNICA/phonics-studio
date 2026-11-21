@@ -134,6 +134,24 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 | 学生 | 输入班级码加入班级，进度自动同步到云端；换设备用同一个账号登录即可拉回 |
 | 老师（建班者） | 建班拿到 8 位班级码、查看班级看板、踢人、重置学生密码、撤销班级 |
 
+### 老师 / 学生身份
+
+注册的时候就要说清自己是哪一类，身份定下来之后不能改：
+
+- **学生**：直接注册即可，界面里只给「输入班级码加入」，**没有「创建班级」**；
+- **老师**：注册时填**教师邀请码**，校验通过才能建班、才能看班级看板。
+
+邀请码是部署方自己掌握的（Pages secret `TEACHER_INVITE_CODE`，不进前端包），由要建班的老师发给自己。服务端会兜死权限：学生账号即使绕过界面直接调建班接口，也会被 403 拒绝。
+
+> 部署方设置邀请码：
+>
+> ```powershell
+> cd backend/cloudflare/pages
+> "你的邀请码" | npx wrangler pages secret put TEACHER_INVITE_CODE --project-name phonics-studio-api
+> ```
+
+老账号（升级前就存在的）在迁移时按「是不是班级 owner」自动判定：owner 升成老师，其余按学生处理。
+
 实现要点：
 
 - 密码用 **PBKDF2-SHA256 / 20000 轮 / 每账号独立 16 字节 salt** 哈希，服务端只存哈希与 salt，明文不落库；
@@ -144,7 +162,7 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 - 没有账号 = **纯本机**，不发起任何云端请求；登录后本机进度按账号分区存放，同一台电脑上多个账号互不污染；
 - 忘记密码只能靠**老师在看板上重置**（生成临时密码并清掉该学生所有会话），这是无验证体系的必然代价。
 
-接口清单见 `backend/cloudflare/pages/functions/api/[[path]].ts` 顶部注释；纯函数体检见 `scripts/test-account-auth.ts`。
+接口清单见 `backend/cloudflare/pages/functions/api/[[path]].ts` 顶部注释；纯函数体检见 `scripts/test-account-auth.ts`；身份 / 权限门禁体检见 `npm run check:role`（29 项）。
 
 ### 合并规则
 

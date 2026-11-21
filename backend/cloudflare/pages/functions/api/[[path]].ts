@@ -26,6 +26,11 @@
 
 interface Env {
   DB: D1Database;
+  /**
+   * 教师邀请码（Pages secret，不进前端包）。
+   * 注册时选「老师」必须填对；没配置时任何人都注册不了老师账号。
+   */
+  TEACHER_INVITE_CODE?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -66,13 +71,69 @@ const WEAK_CODES = new Set([
   'TEACH',
 ]);
 
-interface AccountRow {
+export interface AccountRow {
   account_id: string;
   username: string;
   password_hash: string;
   salt: string;
   display_name: string;
+  /** 账号身份：teacher（老师）/ student（学生）；老库没有这列时按 student 处理 */
+  role?: string;
   created_at: string;
+}
+
+/** 账号身份（跟班级里的 owner/student 不是一回事，是账号级权限） */
+export type AccountKind = 'teacher' | 'student';
+
+export function accountKind(row: AccountRow): AccountKind {
+  return row.role === 'teacher' ? 'teacher' : 'student';
+}
+
+/**
+ * 账号能不能建班（纯函数，体检器直接跑它）
+ *
+ * 学生不能建班 —— 前端不给入口，后端也兜死。
+ */
+export function canCreateClass(account: AccountRow): boolean {
+  return accountKind(account) === 'teacher';
+}
+
+/**
+ * 注册时的身份判定（纯函数，体检器直接跑它）
+ *
+ * - 学生：不需要任何码，直接注册；
+ * - 老师：必须带上和部署方配置一致的教师邀请码。
+ */
+export function resolveRegisterRole(
+  rawRole: string,
+  teacherCode: string,
+  configuredCode: string | undefined,
+): { ok: true; role: AccountKind } | { ok: false; status: number; message: string } {
+  const wanted = rawRole.trim().toLowerCase();
+  if (wanted !== 'teacher') {
+    return { ok: true, role: 'student' };
+  }
+  const expected = (configuredCode ?? '').trim();
+  if (!expected) {
+    return { ok: false, status: 503, message: '服务端还没配置教师邀请码，现在注册不了老师账号' };
+  }
+  if (teacherCode.trim().toUpperCase() !== expected.toUpperCase()) {
+    return { ok: false, status: 403, message: '教师邀请码不对，问一下要建班的老师' };
+  }
+  return { ok: true, role: 'teacher' };
+}
+
+/** 账号对外暴露的字段（三个接口共用，保证前端拿到的身份一致） */
+export function accountPayload(row: AccountRow): {
+  username: string;
+  displayName: string;
+  role: AccountKind;
+} {
+  return {
+    username: row.username,
+    displayName: row.display_name || row.username,
+    role: accountKind(row),
+  };
 }
 
 interface SessionRow {
@@ -363,6 +424,17 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   const displayName = String(body.displayName ?? '').trim().slice(0, 24);
   const rawJoinCode = String(body.joinCode ?? '').trim();
 
+  // 账号身份：学生随便注册；老师必须拿着教师邀请码
+  const roleResult = resolveRegisterRole(
+    String(body.role ?? ''),
+    String(body.teacherCode ?? ''),
+    env.TEACHER_INVITE_CODE,
+  );
+  if (!roleResult.ok) {
+    return fail(roleResult.message, roleResult.status);
+  }
+  const accountRole: AccountKind = roleResult.role;
+
   // 校验用原始输入（含空白即非法），存储用规范化形式（小写），
   // 这样 "Teacher01" 与 "teacher01" 是同一个账号
   const trimmed = rawUsername.trim();
@@ -386,10 +458,18 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   const createdAt = nowIso();
 
   await env.DB.prepare(
-    `INSERT INTO phonics_accounts (account_id, username, password_hash, salt, display_name, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO phonics_accounts (account_id, username, password_hash, salt, display_name, role, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(accountId, username, passwordHash, salt, displayName || username, createdAt)
+    .bind(
+      accountId,
+      username,
+      passwordHash,
+      salt,
+      displayName || username,
+      accountRole,
+      createdAt,
+    )
     .run();
 
   let membership: MemberRow | null = null;
@@ -431,7 +511,7 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   const token = await createSession(env, accountId);
   return json({
     token,
-    account: { username, displayName: displayName || username },
+    account: { username, displayName: displayName || username, role: accountRole },
     membership: membershipPayload(membership, space),
   });
 }
@@ -464,7 +544,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const token = await createSession(env, account.account_id);
   return json({
     token,
-    account: { username: account.username, displayName: account.display_name },
+    account: accountPayload(account),
     membership: membershipPayload(membership, space),
   });
 }
@@ -507,6 +587,10 @@ async function handleCreateClass(request: Request, env: Env): Promise<Response> 
   const auth = await requireAuth(request, env);
   if (!auth) {
     return fail('请先登录', 401);
+  }
+  // 权限在服务端兜死：学生账号不能建班（前端只是不给入口）
+  if (!canCreateClass(auth.account)) {
+    return fail('只有老师才能创建班级，向老师要一个班级码就能加入', 403);
   }
   const body = await readJson(request);
   const name = String(body.name ?? '').trim().slice(0, 40) || '我的班级';
@@ -944,10 +1028,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
         return fail('请先登录', 401);
       }
       return json({
-        account: {
-          username: auth.account.username,
-          displayName: auth.account.display_name,
-        },
+        account: accountPayload(auth.account),
         membership: membershipPayload(auth.membership, auth.space),
       });
     }

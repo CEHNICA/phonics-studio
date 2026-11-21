@@ -262,8 +262,8 @@ export function App() {
             onSyncNow={() => {
               void syncNow();
             }}
-            onRegister={(username, password, displayName) => {
-              void register(username, password, displayName);
+            onRegister={(username, password, displayName, role, teacherCode) => {
+              void register(username, password, displayName, role, teacherCode);
             }}
             onLogin={(username, password) => {
               void login(username, password);

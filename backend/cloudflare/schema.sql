@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS phonics_accounts (
   password_hash  TEXT NOT NULL,
   salt           TEXT NOT NULL,
   display_name   TEXT NOT NULL DEFAULT '',
+  -- 账号身份：teacher（老师，能建班）/ student（学生，只能用班级码加入）
+  role           TEXT NOT NULL DEFAULT 'student',
   created_at     TEXT NOT NULL
 );
 

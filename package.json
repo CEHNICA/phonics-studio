@@ -14,7 +14,8 @@
     "check:js": "node scripts/check-js-budget.ts",
     "preview": "vite preview",
     "check:record": "node scripts/check-record.ts",
-    "check:motion": "node scripts/check-motion.ts"
+    "check:motion": "node scripts/check-motion.ts",
+    "check:role": "node scripts/check-class-role.ts"
   },
   "dependencies": {
     "lucide-react": "^1.77.0",

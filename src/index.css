@@ -3434,6 +3434,48 @@ button {
   background: var(--bg-surface);
 }
 
+/* 账号身份切换（注册时选学生 / 老师） */
+.user-data-role-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--plum-soft);
+}
+
+.user-data-role-switch button {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.user-data-role-switch button.is-active {
+  background: var(--bg-surface);
+  color: var(--plum-deep);
+  box-shadow: 0 1px 2px rgba(37, 29, 58, 0.08);
+}
+
+.user-data-field-tip {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+
+/* 没进班级时那句人话解释 */
+.user-data-hint {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+}
+
 /* ---------- 班级码展示 ---------- */
 
 .user-data-joincode {

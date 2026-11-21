@@ -133,6 +133,30 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 改完必须 `npm run check:motion` **4/4 通过**再提交。
 
+### 改账号 / 班级权限前必读
+
+账号体系有两层身份，别搞混：
+
+- **账号身份**（`phonics_accounts.role`）：`teacher` / `student`。注册时就定死。
+  - 学生：随便注册，只能拿班级码加入别人的班。
+  - 老师：注册时必须带上**教师邀请码**（Pages secret `TEACHER_INVITE_CODE`，不进前端包），校验通过才算老师。
+- **班级身份**（`phonics_members.role`）：`owner` / `student`。建班的人自动是 owner。
+
+**建班权限在服务端兜死**：`handleCreateClass` 先过 `canCreateClass(auth.account)`，学生账号直接 403。前端只是不给入口 —— 学生绕过界面直接调接口一样会被拒。
+
+改这块必须同步这四处，漏一处就漏判：
+
+1. `backend/cloudflare/pages/functions/api/[[path]].ts`：`resolveRegisterRole()` / `canCreateClass()` / `accountPayload()`（三个接口都走它返回 role）。
+2. `backend/cloudflare/schema.sql` + `backend/cloudflare/migrations/`：role 列与迁移脚本。
+3. `src/services/backend/types.ts`：`AccountInfo.role`、`RegisterInput.role/teacherCode`。
+4. `src/components/UserDataPanel.tsx`：「创建班级」按钮必须被 `isTeacher` 门控；注册表单的身份选择在 `user-data-role-switch`。
+
+**文案别再用「还没进班级」** —— 用户看不懂。学生看「还没加入班级」，老师看「还没建班级」，后面跟一句解释这进度只存在本机。
+
+**老账号兼容**：`parseSession` 里没有 role 字段的老会话，按「班级里是不是 owner」兜底成老师；D1 迁移脚本也把老 owner 账号升成 teacher。
+
+改完必须 `npm run check:role` **29/29 通过**再提交。
+
 ### 体检器（尺子）
 
 | 命令 | 管什么 |
@@ -143,6 +167,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:js` | 首屏 JS 总量/单 chunk 预算、chunk 数、非首屏组件是否拆出且不进首屏、首屏源码清单、**浮层条件渲染**、**预取延迟 ≥1500ms**（9 项） |
 | `npm run check:record` | 录音链路：AudioContext 用户手势内 resume、MediaRecorder 按片录制、分析模块预取、非 HTTPS 提示可操作、动态 import 带 catch（12 项） |
 | `npm run check:motion` | 动效：无 infinite 无限动画、存在 `prefers-reduced-motion` 降级、动画类全被覆盖、forwards 终态同时 `display:none`（4 项） |
+| `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（29 项） |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
@@ -154,7 +179,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -176,6 +201,8 @@ git add -A; git commit -m "..."; git push origin main
 - **preact/compat 是运行时替换，类型仍是 @types/react** —— 别引 React 19 特有 API（`use` / `useOptimistic` / `useActionState` / `useFormStatus`），那些在 preact/compat 里没有。
 - 阿里 CDN 对**带任意 query 参数**的静态资源请求，可能直接回源到 SPA fallback 返回 index.html（Content-Type: text/html）。生产代码不要给静态资源加随机 query 参数。
 - `src/data/phonetics.json` 里的 `audioSrc` / `videoSrc` 是**死字段**（指向不存在的 `/sound/phonetics/` 目录）。真正生效的是 `phonics-catalog.ts` 生成的 `localAudioSrc` / `localVideoSrc` / `posterSrc`。别去改 json 里那两个字段，改了没用。
+- **别用子串匹配类名当断言** —— `includes('user-data-role-switch')` 会被 `user-data-role-switch-x` 骗过（尺子假绿）。断言类名要连引号一起匹配（`className="user-data-role-switch"`）。本轮退回验证就抓到过这一条。
+- **账号身份 ≠ 班级身份** —— `phonics_accounts.role`（teacher/student）是账号级，`phonics_members.role`（owner/student）是班级内。建班权限看前者，看板权限看后者。见上面「改账号 / 班级权限前必读」。
 - ffmpeg 转音频时 `-ar` 必须写 `24000`（写 `24` 会报 "Specified sample rate 24 is not supported"），转完用 ffprobe 校验 duration 与原文件一致。
 - `pumpRef.current = pumpPreloadQueue` 这种**渲染期写 ref** 会被 oxlint 判 `react(refs)` 警告，且 StrictMode 双渲染下时序不可靠 —— 一律放 `useEffect` 里。
 - **UI 里 pending 必须排在 playing 前面**（2026-11 已修）：`useAudioPlayer` 的 `setPlayingId` 是在 `play()` **之前**调用的，所以只要点了 `isPlayingCurrentAudio` 立刻为 true。把「正在播放...」写在「加载中...」前面，pending 反馈就永远显示不出来 —— 弱网下用户点了没声、按钮却说在播。`npm run check:audio` 里有两条守护断言专门盯这个顺序（且断言前会把源码空白归一化，避免 JSX 多行造成假阳性）。

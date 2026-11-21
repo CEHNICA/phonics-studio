@@ -19,10 +19,19 @@ export const STATE_VERSION = 2;
 /** 班级里的身份 */
 export type AccountRole = 'owner' | 'student';
 
+/**
+ * 账号身份（账号级权限，跟班级里的 owner/student 不是一回事）：
+ * - teacher：老师，可以创建班级、查看班级看板；
+ * - student：学生，只能用班级码加入班级。
+ */
+export type AccountKind = 'teacher' | 'student';
+
 /** 账号信息 */
 export interface AccountInfo {
   username: string;
   displayName: string;
+  /** 账号身份；老会话没有这字段时按 student 处理 */
+  role: AccountKind;
 }
 
 /** 账号在班级里的状态（不在班级时为 null） */
@@ -104,6 +113,10 @@ export interface RegisterInput {
   username: string;
   password: string;
   displayName?: string;
+  /** 注册时选的身份；选 teacher 必须同时给 teacherCode */
+  role?: AccountKind;
+  /** 教师邀请码（选 teacher 时必填，服务端校验） */
+  teacherCode?: string;
 }
 
 /** 登录入参 */

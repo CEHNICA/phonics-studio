@@ -5,7 +5,7 @@ import { getBackend } from '../services/backend';
 import { localBackend } from '../services/backend/local-backend';
 import { mergeProgressState, MAX_ATTEMPTS } from '../services/backend/merge';
 import { STATE_VERSION } from '../services/backend/types';
-import type { AuthResult, BackendState, Membership } from '../services/backend/types';
+import type { AccountKind, AuthResult, BackendState, Membership } from '../services/backend/types';
 import { accountSession } from '../services/backend/account-session';
 import type { AccountSession } from '../services/backend/account-session';
 import { normalizeJoinCode } from '../services/backend/account-client';
@@ -486,12 +486,18 @@ export function usePhonicsProgress() {
 
   /**
    * 注册账号（不需要任何验证方式）
+   *
+   * 身份在注册时就定下来：
+   * - 学生：随便注册，之后只能用班级码加入班级；
+   * - 老师：必须带教师邀请码，服务端校验通过才算老师。
    */
   const register = useCallback(
     async (
       username: string,
       password: string,
       displayName?: string,
+      role?: AccountKind,
+      teacherCode?: string,
     ): Promise<AuthActionResult> => {
       const backend = getBackend();
       if (!backend.isConfigured()) {
@@ -504,6 +510,8 @@ export function usePhonicsProgress() {
           username: username.trim(),
           password,
           displayName: displayName?.trim() || undefined,
+          role: role ?? 'student',
+          teacherCode: teacherCode?.trim() || undefined,
         });
         applyAuthResult(result);
         return { ok: true };
