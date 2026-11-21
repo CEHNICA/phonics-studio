@@ -31,3 +31,6 @@ dist-analysis
 *.njsproj
 *.sln
 *.sw?
+
+# E2E 截图产物
+shots-circle
