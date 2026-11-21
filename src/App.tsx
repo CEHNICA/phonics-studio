@@ -125,9 +125,24 @@ export function App() {
   }, [activeTab]);
 
   // 空闲时预取其余 tab 的 chunk：切标签时几乎瞬开，同时不与首屏争抢带宽
+  //
+  // 关键约束（线上 3G 限速实测）：**预取绝不能和首屏资源抢带宽**。
+  // 早期版本在 requestIdleCallback 里就开跑，结果预取的 76KB 分析模块把
+  // 首屏卡片图从 1.5s 拖到 3.5s、视频拖到 8s——省下的时间全还回去了。
+  // 现在改成两道闸：
+  //   ① 弱网（effectiveType 2g/3g）直接不预取——弱网本来就抢不过；
+  //   ② 其余情况等 window.load（首屏资源全部落地）后再预取。
   useEffect(() => {
-    const idleCb = window.requestIdleCallback?.bind(window);
-    const run = () => {
+    const conn = (
+      navigator as Navigator & { connection?: { effectiveType?: string } }
+    ).connection;
+    const effectiveType = conn?.effectiveType;
+    if (effectiveType && /^(slow-2g|2g|3g)$/.test(effectiveType)) {
+      return;
+    }
+
+    let cancelled = false;
+    const prefetch = () => {
       void import('./components/ListeningQuiz');
       void import('./components/FourteenDayPlan');
       void import('./components/ConfusablePairsLab');
@@ -136,12 +151,33 @@ export function App() {
       // 录音分析模块（含 63KB 模板表）：空闲时预抢，录音时就不用等
       void import('./utils/pronunciation-analyzer');
     };
-    if (idleCb) {
-      const handle = idleCb(() => run());
-      return () => window.cancelIdleCallback?.(handle);
+
+    const start = () => {
+      if (cancelled) return;
+      const idleCb = window.requestIdleCallback?.bind(window);
+      // load 之后还要再等一会：load 只等静态资源，卡片图 / 音频 / 视频
+      // 这类媒体往往还在下载中，立刻预取照样会抢它们的带宽。
+      const kick = () => {
+        if (cancelled) return;
+        if (idleCb) {
+          idleCb(() => prefetch());
+        } else {
+          prefetch();
+        }
+      };
+      window.setTimeout(kick, 2500);
+    };
+
+    if (document.readyState === 'complete') {
+      start();
+    } else {
+      window.addEventListener('load', start, { once: true });
     }
-    const timer = window.setTimeout(run, 1200);
-    return () => window.clearTimeout(timer);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('load', start);
+    };
   }, []);
 
   return (
@@ -206,57 +242,63 @@ export function App() {
         </Suspense>
       )}
 
-      <Suspense fallback={null}>
-        <UserDataPanel
-          open={userDataOpen}
-          onClose={() => setUserDataOpen(false)}
-          favoriteIds={favoriteIds}
-          attempts={progress.attempts}
-          backendState={backendState}
-          lastSyncedAt={lastSyncedAt}
-          session={session}
-          membership={membership}
-          authError={authError}
-          authBusy={authBusy}
-          onSelectPhoneme={handleOpenInStudio}
-          onSyncNow={() => {
-            void syncNow();
-          }}
-          onRegister={(username, password, displayName) => {
-            void register(username, password, displayName);
-          }}
-          onLogin={(username, password) => {
-            void login(username, password);
-          }}
-          onLogout={() => {
-            void logout();
-          }}
-          onChangePassword={(oldPassword, newPassword) => {
-            void changePassword(oldPassword, newPassword);
-          }}
-          onJoinClass={(code) => {
-            void joinClass(code);
-          }}
-          onCreateClass={(name) => {
-            void createClass(name);
-          }}
-          onLeaveClass={() => {
-            void leaveClass();
-          }}
-          onOpenDashboard={() => {
-            setDashboardOpen(true);
-            setUserDataOpen(false);
-          }}
-        />
-      </Suspense>
+      {/* 只有打开时才挂载：lazy 组件一旦被渲染就会去拉 chunk，
+          条件渲染才能真正把它们踢出首屏 */}
+      {userDataOpen && (
+        <Suspense fallback={null}>
+          <UserDataPanel
+            open
+            onClose={() => setUserDataOpen(false)}
+            favoriteIds={favoriteIds}
+            attempts={progress.attempts}
+            backendState={backendState}
+            lastSyncedAt={lastSyncedAt}
+            session={session}
+            membership={membership}
+            authError={authError}
+            authBusy={authBusy}
+            onSelectPhoneme={handleOpenInStudio}
+            onSyncNow={() => {
+              void syncNow();
+            }}
+            onRegister={(username, password, displayName) => {
+              void register(username, password, displayName);
+            }}
+            onLogin={(username, password) => {
+              void login(username, password);
+            }}
+            onLogout={() => {
+              void logout();
+            }}
+            onChangePassword={(oldPassword, newPassword) => {
+              void changePassword(oldPassword, newPassword);
+            }}
+            onJoinClass={(code) => {
+              void joinClass(code);
+            }}
+            onCreateClass={(name) => {
+              void createClass(name);
+            }}
+            onLeaveClass={() => {
+              void leaveClass();
+            }}
+            onOpenDashboard={() => {
+              setDashboardOpen(true);
+              setUserDataOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
 
-      <Suspense fallback={null}>
-        <ClassDashboard
-          open={dashboardOpen && Boolean(session?.token)}
-          token={session?.token ?? ''}
-          onClose={() => setDashboardOpen(false)}
-        />
-      </Suspense>
+      {dashboardOpen && Boolean(session?.token) && (
+        <Suspense fallback={null}>
+          <ClassDashboard
+            open
+            token={session?.token ?? ''}
+            onClose={() => setDashboardOpen(false)}
+          />
+        </Suspense>
+      )}
 
     </div>
   );

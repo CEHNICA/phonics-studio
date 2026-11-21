@@ -176,6 +176,59 @@ check(
   missing.length === 0 ? MUST_BE_FIRST.join(', ') : `缺：${missing.join(', ')}`,
 );
 
+/* ---------- 4. 源码级守护：lazy 组件必须条件渲染 ---------- */
+/**
+ * 踩过的坑：UserDataPanel / ClassDashboard 虽然用了 React.lazy，
+ * 但在 App 里是**无条件渲染**的（只是 open=false），
+ * React.lazy 看到组件被渲染就会去拉 chunk —— 首屏照样多两个请求。
+ * 必须条件渲染（{userDataOpen && ...}）才真正踢出首屏。
+ */
+const APP_SRC = join(ROOT, 'src', 'App.tsx');
+const appSrc = existsSync(APP_SRC) ? readFileSync(APP_SRC, 'utf8') : '';
+const notConditional: string[] = [];
+for (const [comp, guard] of [
+  ['UserDataPanel', '{userDataOpen && ('],
+  ['ClassDashboard', '{dashboardOpen && Boolean(session?.token) && ('],
+] as const) {
+  if (!appSrc) {
+    notConditional.push(`${comp}(读不到 App.tsx)`);
+    continue;
+  }
+  if (!appSrc.includes(guard)) {
+    notConditional.push(`${comp}(未条件渲染，应写成 ${guard} ...)`);
+  }
+}
+check(
+  '浮层组件用条件渲染（lazy 组件被无条件渲染仍会拉 chunk）',
+  notConditional.length === 0,
+  notConditional.length === 0 ? 'UserDataPanel / ClassDashboard 均条件渲染' : notConditional.join(', '),
+);
+
+/* ---------- 5. 预取不得与首屏抢带宽 ---------- */
+/**
+ * 弱网实测：预取若在首屏媒体下载期间启动，会把卡片图从 1.5s 拖到 3.5s。
+ * 因此预取必须等 window.load 之后再延后一段时间启动。
+ * 注意：只判断「有没有 setTimeout」是不够的——实测把延迟写成 0 时断言照样绿，
+ * 必须校验延迟值本身够大。
+ */
+const MIN_PREFETCH_DELAY_MS = 1500;
+const delayMatch = appSrc.match(/setTimeout\(kick,\s*([0-9]+)\)/);
+const prefetchGuard =
+  /window\.addEventListener\('load'/.test(appSrc) &&
+  !!delayMatch &&
+  Number(delayMatch[1]) >= MIN_PREFETCH_DELAY_MS;
+check(
+  `预取等 window.load 后再延后 ≥${MIN_PREFETCH_DELAY_MS}ms 启动（不与首屏媒体抢带宽）`,
+  prefetchGuard,
+  prefetchGuard
+    ? `已加 load + 延迟 ${delayMatch?.[1]}ms 双闸`
+    : !appSrc
+      ? '读不到 App.tsx'
+      : !/window\.addEventListener\('load'/.test(appSrc)
+        ? '缺少 window.load 保护'
+        : `预取延迟 ${delayMatch?.[1] ?? '未找到'}ms，不足 ${MIN_PREFETCH_DELAY_MS}ms`,
+);
+
 /* ---------- 输出 ---------- */
 console.log('\n=== 首屏加载的 chunk ===');
 for (const f of firstLoadFiles) {
