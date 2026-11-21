@@ -282,15 +282,15 @@ export function CardStudio({
           <div className="toolbar-actions">
             <button
               type="button"
-              className={`primary-audio-btn ${isPlayingCurrentAudio ? 'playing' : ''}`}
+              className={`primary-audio-btn ${isPlayingCurrentAudio && !isPendingPhoneme ? 'playing' : ''}`}
               onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
             >
               <Volume2 size={18} />
               <span>
-                {isPlayingCurrentAudio
-                  ? '正在播放...'
-                  : isPendingPhoneme
-                    ? '加载中...'
+                {isPendingPhoneme
+                  ? '加载中...'
+                  : isPlayingCurrentAudio
+                    ? '正在播放...'
                     : '听标准发音'}
                 {!isPlayingCurrentAudio && !isPendingPhoneme && (
                   <span className="desktop-only-hint"> (空格)</span>
@@ -366,7 +366,7 @@ export function CardStudio({
                       <span className="hotspot-speaker-pill">
                         <Volume2 size={12} />
                         <span>
-                          {isSpeakingCardWord ? '朗读中' : isPendingCardWord ? '加载中' : word}
+                          {isPendingCardWord ? '加载中' : isSpeakingCardWord ? '朗读中' : word}
                         </span>
                       </span>
                     </button>

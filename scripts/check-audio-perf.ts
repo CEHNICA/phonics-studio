@@ -182,6 +182,45 @@ check(
   hookSrc ? '' : '缺少 src/hooks/useAudioPlayer.ts',
 );
 
+/* ---------- 4. UI 层：pending 分支必须排在 playing 分支前面 ---------- */
+/*
+ * 反面教材（2026-11 已修）：hook 里 setPlayingId 是在 play() 之前调用的，
+ * 所以「正在播放...」会立刻盖住「加载中...」，pending 反馈形同虚设。
+ * 弱网下用户点了没声、按钮却说在播 —— 正是「点了没反应」的错觉来源。
+ */
+const CARD_STUDIO = join(ROOT, 'src', 'components', 'CardStudio.tsx');
+const cardSrc = existsSync(CARD_STUDIO) ? readFileSync(CARD_STUDIO, 'utf8') : '';
+/** 归一化空白：JSX 三元链常被 prettier 拆成多行，直接 indexOf 会假阳性 */
+const cardFlat = cardSrc.replace(/\s+/g, ' ');
+
+const pendingBtnIdx = cardFlat.indexOf("isPendingPhoneme ? '加载中...'");
+const playingBtnIdx = cardFlat.indexOf("isPlayingCurrentAudio ? '正在播放...'");
+check(
+  '主按钮「加载中」优先于「正在播放」',
+  cardSrc !== '' && pendingBtnIdx >= 0 && playingBtnIdx >= 0 && pendingBtnIdx < playingBtnIdx,
+  cardSrc === ''
+    ? '缺少 src/components/CardStudio.tsx'
+    : pendingBtnIdx < 0
+      ? '未找到 isPendingPhoneme ? \'加载中...\' 分支'
+      : playingBtnIdx < 0
+        ? '未找到 isPlayingCurrentAudio ? \'正在播放...\' 分支'
+        : `pending@${pendingBtnIdx} vs playing@${playingBtnIdx}`,
+);
+
+const pendingWordIdx = cardFlat.indexOf("isPendingCardWord ? '加载中'");
+const speakingWordIdx = cardFlat.indexOf("isSpeakingCardWord ? '朗读中'");
+check(
+  '单词热点「加载中」优先于「朗读中」',
+  cardSrc !== '' && pendingWordIdx >= 0 && speakingWordIdx >= 0 && pendingWordIdx < speakingWordIdx,
+  cardSrc === ''
+    ? '缺少 src/components/CardStudio.tsx'
+    : pendingWordIdx < 0
+      ? '未找到 isPendingCardWord ? \'加载中\' 分支'
+      : speakingWordIdx < 0
+        ? '未找到 isSpeakingCardWord ? \'朗读中\' 分支'
+        : `pending@${pendingWordIdx} vs speaking@${speakingWordIdx}`,
+);
+
 /* ---------- 输出 ---------- */
 let failed = 0;
 for (const r of results) {
