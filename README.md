@@ -2,7 +2,7 @@
 
 面向初一学生的 **48 个国际音标** 互动伴学网页。看图辨音、听音辨形、跟读打分、易混音标对比、14 天闯关计划，一个页面全包。
 
-技术栈：**React 19 + TypeScript + Vite 8 + Oxlint**，默认**纯前端、无后端依赖**，学习进度存在浏览器 localStorage 里；接入 Cloudflare Pages Functions + D1 后可用「用户名 + 密码」账号体系跨设备同步、按班级码组班、老师看全班看板。
+技术栈：**React 19 兼容层（preact/compat）+ TypeScript + Vite 8 + Oxlint**，默认**纯前端、无后端依赖**，学习进度存在浏览器 localStorage 里；接入 Cloudflare Pages Functions + D1 后可用「用户名 + 密码」账号体系跨设备同步、按班级码组班、老师看全班看板。
 
 线上体验：<https://5p3wt4cgcivtd.space.mcode.cn>
 
@@ -202,6 +202,36 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 - 全量 SSIM 校验最低 **0.9932**（0 张低于 0.98），视觉无损
 
 `scripts/check-cards-perf.ts`（`npm run check:cards`，10 项断言）会**真读 WebP 文件头**解析像素尺寸来验同比例与不超采样，涉及卡片素材或引用路径时必跑。
+
+## 首屏加载性能
+
+**这条是本项目对国内网络最关键的一条。** 素材托管在阿里云 OSS + CDN 上，实测发现：
+
+| 资源类型 | CDN 是否 gzip |
+| --- | --- |
+| HTML / CSS | ✅ 会压 |
+| **JS（33B / 24KB / 220KB 全测过）** | ❌ **一律不压** |
+
+所以**产物的字节数就是国内用户的真实下载量**，压不掉，只能少加载。3G 限速（400 kbps / 300ms）实测，改之前光一个 JS 就要下 **8.8 秒**。
+
+四项改造：
+
+- **运行时换成 preact/compat**（`vite.config.ts` 的 `resolve.alias`）：`react-dom` 单模块就 202 KB，占改造前首屏的 2/3，换成 preact 后约 25 KB。本项目只用到 `createRoot` / hooks / `lazy` / `Suspense` / `forwardRef`，没有用 React 19 特有 API
+- **非首屏组件分包**：听力测验、14 天计划、易混屋、我的数据、班级看板全部 `React.lazy`，且**必须条件渲染**（组件一旦被渲染，lazy 照样会拉 chunk）
+- **录音分析模块按需加载**：`pronunciation-analyzer` 连同 63 KB 声学模板表只在录完音后才用，改成动态 import，空闲时预抢
+- **预取不与首屏抢带宽**：等 `window.load` 之后再延后 ≥1500 ms 启动；弱网（`effectiveType` 为 2g/3g）直接不预取
+
+改造前后（线上实测）：
+
+| 指标 | 改造前 | 改造后 |
+| --- | --- | --- |
+| 首屏 JS（未压缩） | 425.8 KB | **105 KB** |
+| 首屏请求数 | 20 | **10** |
+| 首屏总传输 | 540 KB | **229 KB** |
+| 3G 下首屏全部资源就绪 | 12104 ms | **5861 ms** |
+| 3G 下卡片图可见 | 12079 ms | **5855 ms** |
+
+`scripts/check-js-budget.ts`（`npm run check:js`，9 项断言）会自己跑一份带 sourcemap 的构建，用 manifest 精确算出「首屏真正加载哪些 chunk、含哪些源码」，改动分包或运行时后必跑。
 
 ## 重新生成音素声学模板
 
