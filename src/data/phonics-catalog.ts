@@ -88,9 +88,11 @@ export const PHONEMES: PhonemeItem[] = dataset.phonemes.map((item, index) => {
     // 尺寸与宽高比和原图严格一致，卡片上的单词热区是按百分比定位的，不能变比例。
     cardSrc: `/assets/cards/${item.id}.v2.webp`,
     localAudioSrc: `/assets/sound/${item.id}.v2.mp3`,
-    // NOTE: v2 = 640x360 重编码版。文件名带版本号是为了绕开阿里 CDN 对旧文件的
+    // NOTE: v3 = 640x360 重编码版 + 保留示范发音音轨（AAC 32kHz 单声道）。
+    // v2 那批重编码时把音轨砍掉了，用户点播放「没声音」，v3 补回。
+    // 文件名带版本号是为了绕开阿里 CDN 对旧文件的
     // 30 天边缘缓存（源站 Cache-Control: no-store 只管浏览器，管不了 CDN）
-    localVideoSrc: `/assets/video/${item.id}.v2.mp4`,
+    localVideoSrc: `/assets/video/${item.id}.v3.mp4`,
     // 首帧封面：视频本体加载完前先显示这张图，避免黑屏转圈被当成「加载很慢」
     posterSrc: `/assets/poster/${item.id}.v2.jpg`,
     cardWords: CARD_WORDS_MAP[item.id] ?? [],
