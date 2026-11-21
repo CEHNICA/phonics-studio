@@ -17,10 +17,7 @@ import { PHONEME_MAP, PHONEMES, getRelatedConfusableIds } from '../data/phonics-
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
-import {
-  analyzePronunciation,
-  type PronunciationComparisonResult,
-} from '../utils/pronunciation-analyzer';
+import type { PronunciationComparisonResult } from '../utils/pronunciation-analyzer';
 import { playSelectWordSfx } from '../utils/sound-effects';
 import { PhonemeSidebar, type ProgressFilter } from './PhonemeSidebar';
 
@@ -148,10 +145,14 @@ export function CardStudio({
 
     let cancelled = false;
     setIsAnalyzing(true);
-    void analyzePronunciation(currentPhoneme.id, currentPhoneme.localAudioSrc, blob, {
-      userAlreadyTrimmed: true,
-      userHasSpeech: recorder.trimInfo?.hasSpeech,
-    })
+    // 分析模块（含 63KB 模板表与 DSP 算法）动态加载：只有录完音才需要
+    void import('../utils/pronunciation-analyzer')
+      .then(({ analyzePronunciation }) =>
+        analyzePronunciation(currentPhoneme.id, currentPhoneme.localAudioSrc, blob, {
+          userAlreadyTrimmed: true,
+          userHasSpeech: recorder.trimInfo?.hasSpeech,
+        }),
+      )
       .then((result) => {
         if (!cancelled) {
           setAnalysisResult(result);

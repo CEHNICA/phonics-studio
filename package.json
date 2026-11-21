@@ -11,10 +11,12 @@
     "check:video": "node scripts/check-video-perf.ts",
     "check:audio": "node scripts/check-audio-perf.ts",
     "check:cards": "node scripts/check-cards-perf.ts",
+    "check:js": "node scripts/check-js-budget.ts",
     "preview": "vite preview"
   },
   "dependencies": {
     "lucide-react": "^1.77.0",
+    "preact": "^11.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

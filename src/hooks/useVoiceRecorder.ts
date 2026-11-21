@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { trimRecordedAudioBlob } from '../utils/pronunciation-analyzer';
 import { deleteRecording, loadRecording, saveRecording } from '../utils/recording-store';
 
 export interface VoiceTrimInfo {
@@ -190,27 +189,51 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
         const currentSession = ++sessionCounterRef.current;
         const rawBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
 
-        void trimRecordedAudioBlob(rawBlob).then((result) => {
-          if (sessionCounterRef.current !== currentSession) {
-            return;
-          }
-          const nextTrimInfo: VoiceTrimInfo = {
-            leadingTrimmedSec: result.leadingTrimmedSec,
-            trailingTrimmedSec: result.trailingTrimmedSec,
-            hasSpeech: result.hasSpeech,
-          };
-          const url = URL.createObjectURL(result.blob);
-          setRecordedBlob(result.blob);
-          setTrimInfo(nextTrimInfo);
-          setRecordedUrl((prev) => {
-            if (prev) {
-              URL.revokeObjectURL(prev);
+        // 分析模块（含 63KB 模板表与 DSP 算法）动态加载：首屏完全不需要它
+        void import('../utils/pronunciation-analyzer')
+          .then(({ trimRecordedAudioBlob }) => trimRecordedAudioBlob(rawBlob))
+          .then((result) => {
+            if (sessionCounterRef.current !== currentSession) {
+              return;
             }
-            return url;
+            const nextTrimInfo: VoiceTrimInfo = {
+              leadingTrimmedSec: result.leadingTrimmedSec,
+              trailingTrimmedSec: result.trailingTrimmedSec,
+              hasSpeech: result.hasSpeech,
+            };
+            const url = URL.createObjectURL(result.blob);
+            setRecordedBlob(result.blob);
+            setTrimInfo(nextTrimInfo);
+            setRecordedUrl((prev) => {
+              if (prev) {
+                URL.revokeObjectURL(prev);
+              }
+              return url;
+            });
+            // 录完立即持久化，之后切换音标 / 切换页面 / 刷新都能找回
+            void saveRecording(recordingKey, result.blob, nextTrimInfo);
+          })
+          .catch(() => {
+            // 裁剪失败也要让录音可用，退回原始音频
+            if (sessionCounterRef.current !== currentSession) {
+              return;
+            }
+            const url = URL.createObjectURL(rawBlob);
+            setRecordedBlob(rawBlob);
+            setTrimInfo({ leadingTrimmedSec: 0, trailingTrimmedSec: 0, hasSpeech: true });
+            setRecordedUrl((prev) => {
+              if (prev) {
+                URL.revokeObjectURL(prev);
+              }
+              return url;
+            });
+            void saveRecording(recordingKey, rawBlob, {
+              leadingTrimmedSec: 0,
+              trailingTrimmedSec: 0,
+              hasSpeech: true,
+            });
           });
-          // 录完立即持久化，之后切换音标 / 切换页面 / 刷新都能找回
-          void saveRecording(recordingKey, result.blob, nextTrimInfo);
-        });
+
       };
 
       recorder.start();
