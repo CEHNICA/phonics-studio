@@ -4,10 +4,11 @@
  * 尺子（scripts/check-learning-flow.ts）证明的是「源码里顺序对不对」，
  * 这个脚本证明的是「真实浏览器里，用户看到的顺序对不对」。
  *
- * 验证三件事：
- *   1. 左栏三步编号徽标按 1听发音 → 2跟读 → 3圈出 顺序出现
- *   2. 跟读区第一个按钮是「先听一遍原声」，录音按钮排在它后面
- *   3. 圈出区在跟读区**下面**（视觉顺序，不是 DOM 顺序）
+ * 验证四件事：
+ *   1. 左栏只有**两步**编号徽标：1「听一遍，圈一圈」 → 2「跟读一遍」
+ *   2. 物理顺序：卡片 → 圈出区 → 跟读区（跟读是最后一步）
+ *   3. 跟读区第一个按钮是「先听一遍原声」，录音按钮排在它后面
+ *   4. 圈出区视觉上（像素位置）在跟读区**上面**
  *
  * 运行：
  *   node scripts/e2e-learning-flow.ts
@@ -70,7 +71,7 @@ async function main() {
   await page.waitForSelector('.illustrated-card-img', { timeout: 20000 });
   await page.waitForTimeout(800);
 
-  /* ---------- 1. 三步编号徽标 ---------- */
+  /* ---------- 1. 两步编号徽标 ---------- */
   const badges = await page.$$eval('.card-stage-panel .step-badge', (els) =>
     els.map((el) => ({
       num: el.querySelector('.step-num')?.textContent?.trim() ?? '',
@@ -78,46 +79,38 @@ async function main() {
       top: Math.round(el.getBoundingClientRect().top + window.scrollY),
     })),
   );
-  check('左栏有 3 个步骤编号徽标', badges.length === 3, `实际 ${badges.length}`);
+  check('左栏只有 2 个步骤编号徽标（圈出不是独立一步）', badges.length === 2, `实际 ${badges.length}`);
+  check('步骤编号依次是 1 / 2', badges.map((b) => b.num).join(',') === '1,2', badges.map((b) => b.num).join(','));
   check(
-    '步骤编号依次是 1 / 2 / 3',
-    badges.map((b) => b.num).join(',') === '1,2,3',
-    badges.map((b) => b.num).join(','),
-  );
-  check(
-    '第 1 步是「听发音」',
-    badges[0]?.text.includes('听发音'),
+    '第 1 步是「听一遍，圈一圈」',
+    /听一遍/.test(badges[0]?.text ?? '') && /圈一圈/.test(badges[0]?.text ?? ''),
     badges[0]?.text ?? '',
   );
+  check('第 2 步是「跟读一遍」', (badges[1]?.text ?? '').includes('跟读一遍'), badges[1]?.text ?? '');
   check(
-    '第 2 步是「跟读一遍」',
-    badges[1]?.text.includes('跟读一遍'),
-    badges[1]?.text ?? '',
-  );
-  check(
-    '第 3 步是「圈出最顺口的词」',
-    badges[2]?.text.includes('圈出最顺口的词'),
-    badges[2]?.text ?? '',
-  );
-  check(
-    '三步在页面上从上到下排列（1 在 2 前，2 在 3 前）',
-    badges.length === 3 && badges[0].top < badges[1].top && badges[1].top < badges[2].top,
+    '两步在页面上从上到下排列',
+    badges.length === 2 && badges[0].top < badges[1].top,
     badges.map((b) => `${b.num}@${b.top}`).join(' '),
   );
 
-  /* ---------- 2. 圈出区视觉上在跟读区下面 ---------- */
+  /* ---------- 2. 物理顺序：卡片 → 圈出区 → 跟读区 ---------- */
   const geo = await page.evaluate(() => {
     const rec = document.querySelector('.recorder-center-card');
     const cir = document.querySelector('.codename-box');
     const card = document.querySelector('.illustrated-card-frame');
     const r = (el: Element | null) =>
       el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : -1;
-    return { card: r(card), rec: r(rec), cir: r(cir) };
+    return { card: r(card), cir: r(cir), rec: r(rec) };
   });
   check(
-    '卡片在最上，跟读居中，圈出在最下',
-    geo.card > 0 && geo.card < geo.rec && geo.rec < geo.cir,
+    '卡片在最上，圈出区居中，跟读区在最下',
+    geo.card > 0 && geo.card < geo.cir && geo.cir < geo.rec,
     JSON.stringify(geo),
+  );
+  check(
+    '圈出区视觉上在跟读区上面（圈出属于第一步）',
+    geo.cir > 0 && geo.rec > 0 && geo.cir < geo.rec,
+    `圈出 @${geo.cir} / 跟读 @${geo.rec}`,
   );
 
   /* ---------- 3. 跟读区按钮顺序 ---------- */
@@ -138,11 +131,7 @@ async function main() {
     listenIdx >= 0 && recordIdx >= 0 && listenIdx < recordIdx,
     `听原声 @${listenIdx} / 录音 @${recordIdx}`,
   );
-  check(
-    '「先听一遍原声」是第一个按钮',
-    listenIdx === 0,
-    `实际在第 ${listenIdx + 1} 个`,
-  );
+  check('「先听一遍原声」是第一个按钮', listenIdx === 0, `实际在第 ${listenIdx + 1} 个`);
   check(
     '跟读区不再有旧的「只听原声」按钮',
     !texts.some((t) => t === '只听原声'),
@@ -151,9 +140,25 @@ async function main() {
 
   /* ---------- 4. 跟读小步提示 ---------- */
   const stepLine = (await page.textContent('.recorder-step-line')) ?? '';
-  check('跟读区有 ① 先听原声 → ② 跟我读 提示', stepLine.includes('先听原声') && stepLine.includes('跟我读'), stepLine.replace(/\s+/g, ' '));
+  check(
+    '跟读区有 ① 先听原声 → ② 跟我读 提示',
+    stepLine.includes('先听原声') && stepLine.includes('跟我读'),
+    stepLine.replace(/\s+/g, ' '),
+  );
 
-  /* ---------- 5. 没有控制台报错 ---------- */
+  /* ---------- 5. 圈出仍然可用（搬了位置不能把功能搬坏） ---------- */
+  const chips = await page.$$('.rep-choice-chips .rep-chip');
+  check('圈出区的 3 个候选词还在', chips.length === 3, `实际 ${chips.length}`);
+  if (chips.length === 3) {
+    await chips[0].click();
+    await page.waitForSelector('.card-circle-layer', { timeout: 5000 }).catch(() => null);
+    check('搬了位置后点词仍然能画圈', (await page.$$('.card-circle-layer')).length === 1);
+    await chips[0].click();
+    await page.waitForTimeout(150);
+    check('再点一次仍然能取消圈', (await page.$$('.card-circle-layer')).length === 0);
+  }
+
+  /* ---------- 6. 没有控制台报错 ---------- */
   check('整轮操作没有控制台报错', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' // '));
 
   await browser.close();

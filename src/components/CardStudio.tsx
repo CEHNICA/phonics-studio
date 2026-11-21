@@ -422,13 +422,13 @@ export function CardStudio({
 
         {/* 双栏主学习区 */}
         <div className="studio-grid">
-          {/* 左栏：手绘卡片 → 跟读模仿 → 圈出最顺口的词 */}
+          {/* 左栏：第 1 步 手绘卡片 + 圈出 → 第 2 步 跟读模仿 */}
           <section className="card-stage-panel">
             {/* 第 1 步：听发音 */}
             <div className="step-badge">
               <span className="step-num">1</span>
-              <span className="step-text">听发音</span>
-              <span className="step-subhint">点一下卡片，听这个音怎么读</span>
+              <span className="step-text">听一遍，圈一圈</span>
+              <span className="step-subhint">点卡片听发音，把读起来最顺口的那个词圈出来</span>
             </div>
             <div className="illustrated-card-frame">
               <div className={`illustrated-card-inner ${cardPulse ? 'tap-bounce' : ''}`}>
@@ -498,6 +498,102 @@ export function CardStudio({
                   <Volume2 size={15} />
                   <span>{isPlayingCurrentAudio ? '发音中...' : '点击卡片听音标'}</span>
                 </button>
+              </div>
+            </div>
+
+            {/* 圈出区属于第 1 步：听一遍的时候顺手把最顺口的那个词圈出来 */}
+            {/* 第 3 步：圈出最顺口的词（红圈画在卡片上那个词的位置） */}
+            <div className={`card-homework-box codename-box ${namedFlash ? 'named-flash' : ''}`}>
+              <div className="homework-row">
+                <div className="homework-label-row">
+                  <div className="codename-title-block">
+                    <span className="homework-title">圈出读起来最顺口的那个词</span>
+                    <span className="codename-hint">点下面的词，就会在卡片上把它圈出来</span>
+                  </div>
+                  <div className="homework-status-actions">
+                    {currentProgress.representativeWord && (
+                      <span className="selected-rep-badge codename-live">
+                        圈出：{currentProgress.representativeWord}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={`complete-toggle-btn ${currentProgress.completed ? 'done' : ''}`}
+                      onClick={() => onToggleCompleted(currentPhoneme.id)}
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>{currentProgress.completed ? '今日已学' : '标记已学'}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="rep-choice-chips">
+                  {currentPhoneme.cardWords.map((word, index) => {
+                    const isSelected = currentProgress.representativeWord === word;
+                    const isSpeaking = speakingWord === word;
+                    const isSuggested =
+                      !currentProgress.representativeWord && index === 0;
+                    return (
+                      <button
+                        key={word}
+                        type="button"
+                        className={`rep-chip ${isSelected ? 'active' : ''} ${
+                          isSpeaking ? 'speaking' : ''
+                        } ${isSuggested ? 'suggested' : ''}`}
+                        onClick={() => handleSelectRepresentativeChip(word)}
+                        title={
+                          isSuggested
+                            ? `推荐 ${word}（点一下就圈出来）`
+                            : `圈出 ${word} 并朗读`
+                        }
+                      >
+                        <Volume2 size={13} />
+                        <span>
+                          {CARD_OPTION_LETTERS[index]}. {word}
+                          {isSuggested ? ' · 推荐' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {namedFlash && currentProgress.representativeWord && (
+                  <p className="codename-toast" role="status">
+                    圈好了：{currentProgress.representativeWord}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="codename-custom-toggle"
+                  onClick={() => setShowCustomName((prev) => !prev)}
+                >
+                  {showCustomName ? '收起自己写' : '自己写一个词'}
+                </button>
+
+                {showCustomName && (
+                  <div className="custom-word-row">
+                    <input
+                      type="text"
+                      className="custom-word-input"
+                      placeholder="写一个最顺口的词（如 tea）"
+                      value={customWordInput}
+                      onChange={(event) => setCustomWordInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          handleSaveCustomWord();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="save-word-btn"
+                      onClick={handleSaveCustomWord}
+                      disabled={!customWordInput.trim()}
+                    >
+                      记住它
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -714,106 +810,6 @@ export function CardStudio({
                   </div>
                 </div>
               )}
-            </div>
-            {/* 第 3 步：圈出最顺口的词（红圈画在卡片上那个词的位置） */}
-            <div className="step-badge">
-              <span className="step-num">3</span>
-              <span className="step-text">圈出最顺口的词</span>
-              <span className="step-subhint">在卡片上把读起来最顺口的那个词圈起来</span>
-            </div>
-            <div className={`card-homework-box codename-box ${namedFlash ? 'named-flash' : ''}`}>
-              <div className="homework-row">
-                <div className="homework-label-row">
-                  <div className="codename-title-block">
-                    <span className="homework-title">圈出读起来最顺口的那个词</span>
-                    <span className="codename-hint">点下面的词，就会在卡片上把它圈出来</span>
-                  </div>
-                  <div className="homework-status-actions">
-                    {currentProgress.representativeWord && (
-                      <span className="selected-rep-badge codename-live">
-                        圈出：{currentProgress.representativeWord}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className={`complete-toggle-btn ${currentProgress.completed ? 'done' : ''}`}
-                      onClick={() => onToggleCompleted(currentPhoneme.id)}
-                    >
-                      <CheckCircle2 size={16} />
-                      <span>{currentProgress.completed ? '今日已学' : '标记已学'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rep-choice-chips">
-                  {currentPhoneme.cardWords.map((word, index) => {
-                    const isSelected = currentProgress.representativeWord === word;
-                    const isSpeaking = speakingWord === word;
-                    const isSuggested =
-                      !currentProgress.representativeWord && index === 0;
-                    return (
-                      <button
-                        key={word}
-                        type="button"
-                        className={`rep-chip ${isSelected ? 'active' : ''} ${
-                          isSpeaking ? 'speaking' : ''
-                        } ${isSuggested ? 'suggested' : ''}`}
-                        onClick={() => handleSelectRepresentativeChip(word)}
-                        title={
-                          isSuggested
-                            ? `推荐 ${word}（点一下就圈出来）`
-                            : `圈出 ${word} 并朗读`
-                        }
-                      >
-                        <Volume2 size={13} />
-                        <span>
-                          {CARD_OPTION_LETTERS[index]}. {word}
-                          {isSuggested ? ' · 推荐' : ''}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {namedFlash && currentProgress.representativeWord && (
-                  <p className="codename-toast" role="status">
-                    圈好了：{currentProgress.representativeWord}
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  className="codename-custom-toggle"
-                  onClick={() => setShowCustomName((prev) => !prev)}
-                >
-                  {showCustomName ? '收起自己写' : '自己写一个词'}
-                </button>
-
-                {showCustomName && (
-                  <div className="custom-word-row">
-                    <input
-                      type="text"
-                      className="custom-word-input"
-                      placeholder="写一个最顺口的词（如 tea）"
-                      value={customWordInput}
-                      onChange={(event) => setCustomWordInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          handleSaveCustomWord();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="save-word-btn"
-                      onClick={handleSaveCustomWord}
-                      disabled={!customWordInput.trim()}
-                    >
-                      记住它
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
 
           </section>
