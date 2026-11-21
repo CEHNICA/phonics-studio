@@ -672,6 +672,8 @@ export function CardStudio({
                   key={currentPhoneme.id}
                   ref={videoRef}
                   src={currentPhoneme.localVideoSrc}
+                  poster={currentPhoneme.posterSrc}
+                  preload="metadata"
                   loop={videoLoop}
                   playsInline
                   controls

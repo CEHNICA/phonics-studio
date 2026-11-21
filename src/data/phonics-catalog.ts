@@ -86,6 +86,8 @@ export const PHONEMES: PhonemeItem[] = dataset.phonemes.map((item, index) => {
     cardSrc: `/assets/cards/${item.id}.png?v=2`,
     localAudioSrc: `/assets/sound/${item.id}.mp3`,
     localVideoSrc: `/assets/video/${item.id}.mp4`,
+    // 首帧封面：视频本体加载完前先显示这张图，避免黑屏转圈被当成「加载很慢」
+    posterSrc: `/assets/poster/${item.id}.jpg`,
     cardWords: CARD_WORDS_MAP[item.id] ?? [],
   };
 });

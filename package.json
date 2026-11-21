@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node scripts/test-consolidation.ts",
+    "check:video": "node scripts/check-video-perf.ts",
     "preview": "vite preview"
   },
   "dependencies": {

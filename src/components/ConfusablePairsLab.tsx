@@ -104,6 +104,8 @@ export function ConfusablePairsLab({
             <video
               key={phoneme.id}
               src={phoneme.localVideoSrc}
+              poster={phoneme.posterSrc}
+              preload="metadata"
               controls
               loop
               playsInline

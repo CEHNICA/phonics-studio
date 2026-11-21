@@ -168,6 +168,15 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 
 侧边栏的筛选档位：`未学`（未打卡）、`待巩固`（错题计数 > 0）、`已掌握`（已打卡且错题计数为 0）。规则实现见 `src/utils/consolidation.ts`，回归测试见 `scripts/test-consolidation.ts`。
 
+## 视频加载性能
+
+「口型演示实验室」的视频走阿里云 OSS + CDN（`X-Swift-CacheTime: 2592000`，边缘缓存 30 天），但源站对浏览器下发 `Cache-Control: no-store`，**浏览器不落盘缓存**——每次切换音标或重播都要完整重下一遍。所以体积就是首帧延迟，体积必须压到最小：
+
+- 48 个视频全部重编码为 **640×360 / h264 main / CRF 27 / faststart**，总体积 **15.19 MB → 1.44 MB（-90.5%）**，单文件 60 KB 以内
+- 每个视频配一张 **首帧封面** `public/assets/poster/*.jpg`（约 15 KB），`<video>` 加 `poster` + `preload="metadata"`，视频没下完也先有画面，不再是黑屏转圈
+
+改动前后的量化对照由 `scripts/check-video-perf.ts` 把关（`npm run check:video`，7 项断言），涉及视频素材或 `<video>` 标签时必跑。
+
 ## 重新生成音素声学模板
 
 `src/data/phoneme-templates.json` 是离线算出来的：对每个音标的 MP3 用 ffmpeg 转成 16 kHz 单声道 PCM，提取声学特征后量化成模板。

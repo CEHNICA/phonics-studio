@@ -46,6 +46,8 @@ export interface PhonemeItem extends RawPhonemeItem {
   localAudioSrc: string;
   /** 本地口型演示视频路径 */
   localVideoSrc: string;
+  /** 口型演示视频首帧封面（视频加载完成前显示） */
+  posterSrc: string;
   /** 手绘插画卡片上自带的 A/B/C 三个代表词 */
   cardWords: string[];
 }
