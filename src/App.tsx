@@ -76,6 +76,7 @@ export function App() {
     joinClass,
     createClass,
     leaveClass,
+    syncAccountState,
   } = usePhonicsProgress();
 
   const handleOpenInStudio = useCallback((phonemeId: string) => {
@@ -192,7 +193,13 @@ export function App() {
         onResetProgress={resetAllProgress}
         favoriteCount={summary.favoriteCount}
         backendState={backendState}
-        onOpenUserData={() => setUserDataOpen(true)}
+        onOpenUserData={() => {
+          // 用户要动账号了：先把后端连接打通（跨境冷启动会挂好几秒），
+          // 再把身份和班级状态跟服务端对齐，
+          // 免得面板显示的还是登录那会儿的旧数据
+          void syncAccountState();
+          setUserDataOpen(true);
+        }}
       />
 
       {activeTab === 'studio' && (

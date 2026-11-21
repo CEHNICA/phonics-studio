@@ -30,10 +30,26 @@ import type {
   LoginInput,
   RegisterInput,
   UserStatePayload,
-} from './types';
-import { STATE_VERSION } from './types';
+} from './types.ts';
+import { STATE_VERSION } from './types.ts';
+import { normalizeBackendError } from './error-messages.ts';
 
-const REQUEST_TIMEOUT_MS = 8000;
+/**
+ * 请求超时
+ *
+ * 为什么是 15 秒不是 8 秒（第 9 轮实测）：
+ * 后端在 *.pages.dev（跨境），首次连接碰上丢包会走 TCP 重传，
+ * 实测有请求整整挂了 9 秒才被掐断 —— 8 秒一刀切下去，
+ * 用户点「创建班级」会看到「signal is aborted without reason」，
+ * 班级根本没建出来。留够 15 秒，弱网下也能把请求送到。
+ *
+ * 宁可多等几秒，也不要把用户的操作判死。
+ */
+export const REQUEST_TIMEOUT_MS = 15000;
+
+/** 健康检查（也是预热连接用的）只探连通性，超时短一点，别在后台挂太久 */
+const PING_TIMEOUT_MS = 5000;
+
 const TOKEN_HEADER = 'x-phonics-token';
 
 function trimBase(url: string): string {
@@ -43,11 +59,20 @@ function trimBase(url: string): string {
 /**
  * 带超时的 fetch，避免弱网下请求长期挂起拖慢界面
  */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    // 掐断 / 网络不可达 → 翻译成人话。
+    // 绝不能把 AbortError 的原文（「signal is aborted without reason」）
+    // 甩到界面上，用户看不懂也不知道该干嘛。
+    throw new Error(normalizeBackendError(error, '连接服务器失败'));
   } finally {
     clearTimeout(timer);
   }
@@ -71,8 +96,12 @@ async function readError(response: Response, fallback: string): Promise<Error> {
   return new Error(`${fallback}：HTTP ${response.status}`);
 }
 
-export function createWorkerBackend(baseUrl: string): BackendProvider {
+export function createWorkerBackend(
+  baseUrl: string,
+  options?: { timeoutMs?: number },
+): BackendProvider {
   const base = trimBase(baseUrl);
+  const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
   /**
    * 发一个 JSON 请求并解析响应；非 2xx 时抛出带服务端文案的错误
@@ -90,11 +119,17 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
     if (token) {
       headers[TOKEN_HEADER] = token;
     }
-    const response = await fetchWithTimeout(`${base}${path}`, { ...init, headers });
-    if (!response.ok) {
-      throw await readError(response, fallback);
+    try {
+      const response = await fetchWithTimeout(`${base}${path}`, { ...init, headers }, timeoutMs);
+      if (!response.ok) {
+        throw await readError(response, fallback);
+      }
+      return (await response.json()) as T;
+    } catch (error) {
+      // readError 抛的是服务端给的中文提示，归一化时原样保留；
+      // 网络类错误在这里翻成人话。
+      throw new Error(normalizeBackendError(error, fallback));
     }
-    return (await response.json()) as T;
   }
 
   return {
@@ -164,44 +199,66 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
     },
 
     async load(token: string): Promise<UserStatePayload | null> {
-      const response = await fetchWithTimeout(`${base}/api/state`, {
-        method: 'GET',
-        headers: { [TOKEN_HEADER]: token },
-      });
-      if (response.status === 404) {
-        return null;
+      try {
+        const response = await fetchWithTimeout(
+          `${base}/api/state`,
+          {
+            method: 'GET',
+            headers: { [TOKEN_HEADER]: token },
+          },
+          timeoutMs,
+        );
+        if (response.status === 404) {
+          return null;
+        }
+        if (!response.ok) {
+          throw await readError(response, '读取云端数据失败');
+        }
+        const data = (await response.json()) as UserStatePayload;
+        if (!data || !data.state) {
+          return null;
+        }
+        return { ...data, version: data.version ?? STATE_VERSION };
+      } catch (error) {
+        throw new Error(normalizeBackendError(error, '读取云端数据失败'));
       }
-      if (!response.ok) {
-        throw await readError(response, '读取云端数据失败');
-      }
-      const data = (await response.json()) as UserStatePayload;
-      if (!data || !data.state) {
-        return null;
-      }
-      return { ...data, version: data.version ?? STATE_VERSION };
     },
 
     async save(token: string, payload: UserStatePayload): Promise<void> {
-      const response = await fetchWithTimeout(`${base}/api/state`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          [TOKEN_HEADER]: token,
-        },
-        body: JSON.stringify({
-          version: STATE_VERSION,
-          state: payload.state,
-          updatedAt: payload.updatedAt,
-        }),
-      });
-      if (!response.ok) {
-        throw await readError(response, '保存云端数据失败');
+      try {
+        const response = await fetchWithTimeout(
+          `${base}/api/state`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              [TOKEN_HEADER]: token,
+            },
+            body: JSON.stringify({
+              version: STATE_VERSION,
+              state: payload.state,
+              updatedAt: payload.updatedAt,
+            }),
+          },
+          timeoutMs,
+        );
+        if (!response.ok) {
+          throw await readError(response, '保存云端数据失败');
+        }
+      } catch (error) {
+        throw new Error(normalizeBackendError(error, '保存云端数据失败'));
       }
     },
 
     async ping(): Promise<boolean> {
       try {
-        const response = await fetchWithTimeout(`${base}/api/health`, { method: 'GET' });
+        // 健康检查用短超时：它只是「探一下能不能连上」，
+        // 不值得在后台挂 15 秒（页面加载时会用它预热连接）
+        const response = await fetchWithTimeout(
+          `${base}/api/health`,
+          { method: 'GET' },
+          PING_TIMEOUT_MS,
+        );
         return response.ok;
       } catch {
         return false;

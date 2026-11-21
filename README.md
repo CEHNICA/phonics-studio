@@ -162,7 +162,21 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 - 没有账号 = **纯本机**，不发起任何云端请求；登录后本机进度按账号分区存放，同一台电脑上多个账号互不污染；
 - 忘记密码只能靠**老师在看板上重置**（生成临时密码并清掉该学生所有会话），这是无验证体系的必然代价。
 
-接口清单见 `backend/cloudflare/pages/functions/api/[[path]].ts` 顶部注释；纯函数体检见 `scripts/test-account-auth.ts`；身份 / 权限门禁体检见 `npm run check:role`（29 项）。
+接口清单见 `backend/cloudflare/pages/functions/api/[[path]].ts` 顶部注释；纯函数体检见 `scripts/test-account-auth.ts`；身份 / 权限门禁体检见 `npm run check:role`（30 项）。
+
+### 账号链路在弱网下要「稳」
+
+前端在国内（`*.space.mcode.cn`），后端在 `*.pages.dev`（**跨境**）—— 这条链路的抖动是真实存在的。第 9 轮实测抓到三个坑并修掉：
+
+| 坑 | 现象 | 修法 |
+| --- | --- | --- |
+| **8 秒超时太短** | 建班请求碰上 TCP 丢包重传（实测挂到 9 秒才被掐断），被浏览器 abort，**班级根本没建出来** | 超时放宽到 **15 秒**（`REQUEST_TIMEOUT_MS`）；页面加载时先 `ping()` **预热连接**，用户点按钮时已是热连接 |
+| **技术错误直接甩给用户** | 界面上冒出来 `signal is aborted without reason` | `src/services/backend/error-messages.ts` 的 `normalizeBackendError()` 统一翻译成中文人话：掐断 →「网络太慢没连上，等一会儿再试一次」，网络不可达 →「连不上服务器，检查一下网络再试一次」；**服务端给的中文提示原样保留** |
+| **界面只信本地会话** | 本地会话是登录那会儿的快照。用户在别的设备建过班 → 界面还写「还没建班级」，点「创建班级」被服务端 409 顶回来，用户被卡死 | 挂载时和打开「我的数据」面板时都跑 `syncAccountState()`：`ping()` 预热 + `me()` **跟服务端校准**身份与班级状态；建班失败后回头 `refreshMembership()`（请求可能其实成功了，只是响应丢了） |
+
+建班**不是幂等**的，所以**不自动重试** —— 超时后重试可能建出两个班。正确做法是「失败后刷新班级状态」，让界面自己看出到底建没建成。
+
+`npm run check:account-net`（16 项）逐条守住这三件事，包括**对着一个「收到请求但不回话」的本地服务器真跑一次建班**，断言抛出来的是中文人话而不是 AbortError 原文。改账号链路（超时、错误文案、身份校准）必跑。
 
 ### 合并规则
 
@@ -259,7 +273,7 @@ node scripts/derive-card-word-slots.ts --write src/data/card-word-slots.ts
 
 怎么证明「圈真的套在词上」（别只信代码看着对）：
 
-- `npm run check:circle`（23 项）：槽位数据完整性、与素材实测误差 ≤ 4px、**圈覆盖率 ≥ 85%**（椭圆圈住的词块黑像素比例）、坐标系与 `pointer-events`、匹配纯函数真跑、旧口径文案全仓清零；
+- `npm run check:circle`（24 项）：槽位数据完整性、与素材实测误差 ≤ 4px、**圈覆盖率 ≥ 85%**（椭圆圈住的词块黑像素比例）、坐标系与 `pointer-events`、匹配纯函数真跑、旧口径文案全仓清零；
 - `node scripts/e2e-card-circle.ts`（18 项，Playwright）：真点 chip → 圈出现 → 坐标等于该卡槽位 → 再点取消 → 点卡片词不产生圈 → 自己写的词不画圈 → 换音标圈不串；最后**截图取像素**，把红色像素的位置换算回 1050×623 坐标系，和原图里那个词的包围盒比对。
 
 > 坑：卡片插画里本来就有大面积红色（苹果、船…），像素验证不能全图找红像素，必须先取圈层 `<ellipse>` 的屏幕矩形，只在那一个窗口里找。

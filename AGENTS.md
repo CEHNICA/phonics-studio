@@ -155,7 +155,21 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 **老账号兼容**：`parseSession` 里没有 role 字段的老会话，按「班级里是不是 owner」兜底成老师；D1 迁移脚本也把老 owner 账号升成 teacher。
 
-改完必须 `npm run check:role` **29/29 通过**再提交。
+改完必须 `npm run check:role` **30/30 通过**再提交。
+
+### 改账号链路（弱网 / 身份校准）前必读
+
+后端在 `*.pages.dev`（**跨境**），前端在 `*.space.mcode.cn`（国内）。这条链路的抖动是真实存在的，第 9 轮实测抓到三个坑：
+
+1. **超时不能是 8 秒。** `REQUEST_TIMEOUT_MS`（`src/services/backend/worker-backend.ts`）现在是 **15000ms**。实测有请求整整挂了 9 秒才被掐断（TCP 丢包重传），8 秒一刀切下去，用户点「创建班级」会**失败且班级没建出来**。别为了"界面别卡住"把它调回 8 秒。
+2. **错误必须归一化，不许把技术串甩给用户。** `src/services/backend/error-messages.ts` 的 `normalizeBackendError()` 是唯一出口：掐断 → 「网络太慢没连上，等一会儿再试一次」，网络不可达 → 「连不上服务器，检查一下网络再试一次」，**服务端给的中文提示原样保留**，看不懂的英文 → 调用方的中文兜底。改任何会抛错的地方，都要把错误过一遍这个函数 —— 之前 AbortError 原文「signal is aborted without reason」直接显示在界面上。
+3. **界面必须信服务端，不能只信 localStorage。** `syncAccountState()`（`src/hooks/usePhonicsProgress.ts`）做两件事：`ping()` 预热连接 + `me()` 校准身份与班级状态。它在**挂载时**和**打开「我的数据」面板时**都会跑（30 秒内不重复）。不校准的话，界面会一直显示「还没建班级」，而服务端回 409「你已经在一个班级里了」—— 用户被卡死。建班失败后还要回头 `refreshMembership()`：请求可能其实成功了（响应在路上丢了），班级码该显示出来。
+
+**建班不是幂等的，所以不要自动重试** —— 超时后重试可能建出两个班。正确做法是「失败后刷新班级状态」，让界面自己看出到底建没建成。
+
+**`worker-backend.ts` 的运行时 import 必须带 `.ts` 扩展**（`from './types.ts'`）：体检器要在纯 node 下 import 这个模块真跑，没有扩展名 node 解析不了（`allowImportingTsExtensions` 已经是开的，vite 也认）。
+
+改完必须 `npm run check:account-net` **16/16 通过**再提交。
 
 ### 改「圈出最顺口的词」前必读
 
@@ -177,7 +191,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 6. **卡片上点词仍然只朗读，不改答案。** 「圈」的唯一入口是下方 A/B/C 那一排；再点同一个 chip = 取消圈（toggle）。
 
-改完必须 `npm run check:circle` **23/23 通过** + `node scripts/e2e-card-circle.ts` **18/18 通过**再提交。
+改完必须 `npm run check:circle` **24/24 通过** + `node scripts/e2e-card-circle.ts` **18/18 通过**再提交。
 
 **坑：卡片插画里本来就有大面积红色**（苹果、船…）。做像素级验证时不能全图找红像素 —— 会把插画当成圈。必须先取圈层 `<ellipse>` 的屏幕矩形，只在那一个窗口里找红像素。
 
@@ -233,9 +247,10 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:js` | 首屏 JS 总量/单 chunk 预算、chunk 数、非首屏组件是否拆出且不进首屏、首屏源码清单、**浮层条件渲染**、**预取延迟 ≥1500ms**（9 项） |
 | `npm run check:record` | 录音链路：AudioContext 用户手势内 resume、MediaRecorder 按片录制、分析模块预取、非 HTTPS 提示可操作、动态 import 带 catch（12 项） |
 | `npm run check:motion` | 动效：无 infinite 无限动画、存在 `prefers-reduced-motion` 降级、动画类全被覆盖、forwards 终态同时 `display:none`（4 项） |
-| `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（29 项） |
+| `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（30 项） |
 | `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
-| `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（23 项） |
+| `npm run check:account-net` | 账号链路的弱网健壮性：错误归一化纯函数**真跑**（AbortError / Failed to fetch / 服务端中文 / 英文兜底）、默认超时 ≥15s、**对着挂死的本地服务器真跑建班**（必须抛中文人话）、有「ping 预热 + me 校准」一体的同步逻辑、挂载与打开面板都触发它、建班失败会回头刷新班级状态、代码里不出现技术错误串（16 项） |
+| `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（24 项） |
 | `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
 | `npm run check:flow` | 「学习流程顺序」：**只有两步**（1 听一遍+圈一圈 → 2 跟读一遍）、没有第 3 步、圈出区紧跟卡片、跟读区在最后、徽标位置、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（17 项） |
 | `npm run e2e:flow` | 上面那条尺子的**浏览器真机版**（Playwright，17 项）：徽标只有 2 个且从上到下、圈出区**视觉上**在跟读区上面、「先听一遍原声」确实是跟读区第一个按钮、搬了位置后点词仍能画圈并取消 |
@@ -243,7 +258,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
-改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 11/11 通过**再提交；改音频后 **`npm run check:audio` 必须 16/16 通过**再提交；改卡片图后 **`npm run check:cards` 必须 10/10 通过**再提交；动分包/运行时后 **`npm run check:js` 必须 9/9 通过**再提交；动录音链路后 **`npm run check:record` 必须 12/12 通过**再提交。
+改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 11/11 通过**再提交；改音频后 **`npm run check:audio` 必须 16/16 通过**再提交；改卡片图后 **`npm run check:cards` 必须 10/10 通过**再提交；动分包/运行时后 **`npm run check:js` 必须 9/9 通过**再提交；动录音链路后 **`npm run check:record` 必须 12/12 通过**再提交；动账号链路（超时 / 错误文案 / 身份校准）后 **`npm run check:account-net` 必须 16/16 通过**再提交。
 
 **每加一条守护断言，都要实测退回验证**：把被守护的写法改回旧样子，确认体检器**精确红在自己那条**、其余全绿。断言本身也要验 —— 本轮就抓到过「只判有没有 `setTimeout`」的假阳性（把延迟写成 0 照样绿），已改成校验延迟值本身。
 

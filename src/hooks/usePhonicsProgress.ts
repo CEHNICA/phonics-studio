@@ -8,6 +8,7 @@ import { STATE_VERSION } from '../services/backend/types';
 import type { AccountKind, AuthResult, BackendState, Membership } from '../services/backend/types';
 import { accountSession } from '../services/backend/account-session';
 import type { AccountSession } from '../services/backend/account-session';
+import { normalizeBackendError } from '../services/backend/error-messages';
 import { normalizeJoinCode } from '../services/backend/account-client';
 import type { PhonemeProgress, QuizAttempt, UserProgressState } from '../types/phonics';
 
@@ -39,6 +40,9 @@ const EMPTY_PHONEME_PROGRESS: PhonemeProgress = {
 
 /** 推送到云端的防抖间隔（毫秒） */
 const PUSH_DEBOUNCE_MS = 1200;
+
+/** 跟服务端对齐账号状态的最短间隔（毫秒）：别把后端打太勤 */
+const ACCOUNT_SYNC_INTERVAL_MS = 30000;
 
 /** 身份相关操作的结果 */
 export interface AuthActionResult {
@@ -145,6 +149,10 @@ export function usePhonicsProgress() {
   const progressRef = useRef<UserProgressState>(progress);
   const lastPushedRef = useRef<string>('');
   const hydratedRef = useRef<boolean>(false);
+  /** 会话最新值：异步回调里别拿闭包里的旧值 */
+  const sessionRef = useRef<AccountSession | null>(session);
+  /** 上次跟服务端对齐账号状态的时间（避免频繁请求） */
+  const lastAccountSyncRef = useRef<number>(0);
 
   useEffect(() => {
     progressRef.current = progress;
@@ -339,6 +347,62 @@ export function usePhonicsProgress() {
     applySession({ ...session, account: data.account, membership: data.membership });
     return data.membership;
   }, [applySession, session]);
+
+  // 会话变化时同步给 ref（异步回调里用最新值）
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  /**
+   * 跟服务端对齐账号状态：先预热连接，再拉最新的身份与班级状态
+   *
+   * 为什么两件事都要做（第 9 轮实测拿到的坑）：
+   * - 预热：后端在跨境（*.pages.dev），首次连接碰上丢包会挂好几秒。
+   *   用户点「创建班级」时正好撞在这条冷启动路径上，请求被浏览器掐断，
+   *   班级根本没建出来。提前把连接打通，点按钮时就是热连接。
+   * - 校准：本地会话是登录那一刻的快照。用户在别的设备建过班、
+   *   或者身份被改过，本地那份就是过期数据。界面一直拿它当真相的话，
+   *   会出现「界面说还没建班级，服务端说已经在班里」的死结。
+   *
+   * 校准失败不打扰用户：保持本地会话，等用户主动操作时再报错。
+   */
+  const syncAccountState = useCallback(async (): Promise<void> => {
+    const backend = getBackend();
+    if (!backend.isConfigured()) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastAccountSyncRef.current < ACCOUNT_SYNC_INTERVAL_MS) {
+      return;
+    }
+    lastAccountSyncRef.current = now;
+
+    // 预热：只探连通性，不碰任何用户数据
+    void backend.ping();
+
+    const latest = sessionRef.current;
+    if (!latest) {
+      return;
+    }
+    try {
+      const data = await backend.me(latest.token);
+      const current = sessionRef.current;
+      if (!current) {
+        return;
+      }
+      applySession({ ...current, account: data.account, membership: data.membership });
+    } catch {
+      // 连不上就先不校准，保持本地会话
+    }
+  }, [applySession]);
+
+  // 登录状态下，进页面就跟服务端对齐一次账号状态
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    void syncAccountState();
+  }, [session, syncAccountState]);
 
   /**
    * 把当前状态推送到云端（没登录 / 还没加入班级 / 没接入远端 = 纯本机，不推送）
@@ -639,7 +703,18 @@ export function usePhonicsProgress() {
         await refreshMembership();
         return { ok: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : '创建班级失败';
+        const message = normalizeBackendError(error, '创建班级失败');
+        // 请求可能其实成功了（响应在路上丢了）：
+        // 回头看一眼班级状态，真建出来了就把班级码显示出来，别让用户白等
+        try {
+          const membership = await refreshMembership();
+          if (membership) {
+            setAuthError(null);
+            return { ok: true };
+          }
+        } catch {
+          // 刷新也失败，就还是显示上面的错误
+        }
         setAuthError(message);
         return { ok: false, message };
       } finally {
@@ -725,5 +800,7 @@ export function usePhonicsProgress() {
     joinClass,
     createClass,
     leaveClass,
+    /** 跟服务端对齐账号状态（预热连接 + 校准身份与班级） */
+    syncAccountState,
   };
 }
