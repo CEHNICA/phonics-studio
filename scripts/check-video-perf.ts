@@ -32,10 +32,12 @@ const check = (name: string, ok: boolean, detail: string) => {
 };
 
 /* ---------- 1. 素材层：体积预算 ---------- */
+let videoFiles: string[] = [];
 if (!existsSync(VIDEO_DIR)) {
   check('素材目录存在', false, `缺少 ${VIDEO_DIR}`);
 } else {
   const files = readdirSync(VIDEO_DIR).filter((f) => f.endsWith('.mp4'));
+  videoFiles = files;
   let total = 0;
   let max = 0;
   let maxName = '';
@@ -70,6 +72,15 @@ if (!existsSync(POSTER_DIR)) {
 } else {
   const posters = readdirSync(POSTER_DIR).filter((f) => /\.(jpg|jpeg|png)$/i.test(f));
   check('poster 封面数量为 48', posters.length === 48, `实际 ${posters.length} 个`);
+  // 每个视频都要有同名封面，否则切音标会闪黑屏
+  const noPoster = videoFiles
+    .map((f) => f.replace(/\.mp4$/, '.jpg'))
+    .filter((f) => !posters.includes(f));
+  check(
+    '每个视频都有同名 poster',
+    noPoster.length === 0,
+    noPoster.length === 0 ? '' : `缺 ${noPoster.slice(0, 5).join(', ')}`,
+  );
 }
 
 /* ---------- 3. 数据层：catalog 提供 posterSrc ---------- */
