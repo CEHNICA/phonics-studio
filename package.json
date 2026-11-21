@@ -21,6 +21,7 @@
     "check:motion": "node scripts/check-motion.ts",
     "check:role": "node scripts/check-class-role.ts",
     "check:account-net": "node scripts/check-account-net.ts",
+    "check:dash-perf": "node scripts/check-dash-perf.ts",
     "check:role-e2e": "node scripts/e2e-role-ui.cjs"
   },
   "dependencies": {

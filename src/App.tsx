@@ -3,6 +3,14 @@ import { CardStudio } from './components/CardStudio';
 import { TopHeader } from './components/TopHeader';
 import { CONFUSABLE_PAIRS, PHONEMES } from './data/phonics-catalog';
 import { usePhonicsProgress } from './hooks/usePhonicsProgress';
+import { getBackend } from './services/backend';
+import {
+  browserCacheStorage,
+  readPrefetchAt,
+  shouldPrefetchClassOverview,
+  writeClassOverviewCache,
+  writePrefetchAt,
+} from './services/backend/class-overview-cache';
 import type { AppTab, StudyDayPlan } from './types/phonics';
 
 /**
@@ -78,6 +86,49 @@ export function App() {
     leaveClass,
     syncAccountState,
   } = usePhonicsProgress();
+
+  /**
+   * 提前把看板数据拉回来
+   *
+   * 跨境接口单次要 0.2~3 秒，等老师点「打开班级看板」再去拉就晚了。
+   * 这里在用户打开「我的数据」面板时就先发请求 —— 等他点按钮时数据已经在路上了。
+   * 节流：30 秒内不重复打，别把跨境带宽耗在自己身上。
+   */
+  const prefetchClassOverview = useCallback(async () => {
+    const token = session?.token;
+    if (!token || membership?.role !== 'owner') {
+      return;
+    }
+    const storage = browserCacheStorage();
+    if (!storage) {
+      return;
+    }
+    const now = Date.now();
+    if (!shouldPrefetchClassOverview(readPrefetchAt(storage), now)) {
+      return;
+    }
+    try {
+      const data = await getBackend().classOverview(token);
+      writeClassOverviewCache(storage, data.space.id, data);
+      writePrefetchAt(storage, now);
+    } catch {
+      // 预取失败无所谓：用户真点按钮时看板组件还会再拉一次
+    }
+  }, [session?.token, membership?.role]);
+
+  /**
+   * 登录态一就绪就把看板数据拉回来
+   *
+   * 老师点「打开班级看板」之前，往往只隔了几百毫秒 —— 等点「我的数据」才预取根本来不及
+   * （实测跨境单次 300~3000ms）。所以页面一加载、确认是班级老师，就先在后台拉。
+   * 拉回来的数据进缓存，看板打开时直接秒开。
+   */
+  useEffect(() => {
+    if (!session?.token || membership?.role !== 'owner') {
+      return;
+    }
+    void prefetchClassOverview();
+  }, [session?.token, membership?.role, prefetchClassOverview]);
 
   const handleOpenInStudio = useCallback((phonemeId: string) => {
     setDayFilterIds(null);
@@ -198,6 +249,8 @@ export function App() {
           // 再把身份和班级状态跟服务端对齐，
           // 免得面板显示的还是登录那会儿的旧数据
           void syncAccountState();
+          // 顺带把看板数据先拉回来：等他点「打开班级看板」时就不用干等
+          void prefetchClassOverview();
           setUserDataOpen(true);
         }}
       />

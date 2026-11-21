@@ -171,6 +171,42 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 改完必须 `npm run check:account-net` **16/16 通过**再提交。
 
+### 改「班级看板」前必读
+
+第 10 轮实测（2026-11-21）。老师反馈「班级看板读取数据慢」，量完发现**慢的根因是跨境网络，不是代码**：
+
+同一个 `/api/health`（11 字节、零 D1 查询），同一台机器：
+
+| 测法 | 耗时 |
+| --- | --- |
+| Node 直连 | 中位 268ms |
+| Chrome 里 | 310 ~ 3151ms（抖动 10 倍） |
+| Chrome + `--disable-quic` | 无差别（`nextHopProtocol` 本来就是 http/1.1，不是 QUIC 的锅） |
+
+所以**单次请求耗时不可控**，别再指望「优化接口实现」能把它压下去。能压的只有两件事：**少跑一趟** + **把等待藏起来**。
+
+1. **后端少跑一趟。** `requireAuth` 原来是**串行 4 次** D1 查询（session → account → member → space），现在合成**一条 JOIN**（`AUTH_LOOKUP_SQL`）。看板接口自身再查一次成员表（`CLASS_MEMBERS_SQL`，一条 LEFT JOIN accounts，**不是 N+1**）。整条链路 5 次往返 → 2 次。
+
+2. **前端藏等待。** `src/services/backend/class-overview-cache.ts` 做 stale-while-revalidate：上次看过的数据存 localStorage，再打开**立刻亮出来**，同时后台刷新。
+
+3. **预取要早。** 老师点「打开班级看板」之前往往只隔几百毫秒 —— 等点「我的数据」才拉来不及。`App.tsx` 在**登录态就绪时**（`useEffect` 依赖 `session?.token` / `membership?.role`）就预取；打开面板时再补一次（30 秒节流，`shouldPrefetchClassOverview`）。
+
+4. **数据够新就别再打接口。** `isClassOverviewFresh()`（30 秒门槛）：预取刚回来老师就点看板，再发一次就是白等 300~3000ms。但**手动点「刷新」和改名单之后必须 `load(true)` 强制拉最新** —— 别拿缓存糊弄老师。
+
+5. **慢的时候要说人话。** 超过 600ms（`SLOW_LOAD_HINT_MS`）显示「网络有点慢，还在读班级数据…」，别让人干瞪眼。
+
+6. **缓存按班级隔离** —— 换班 / 退班不能把上一个班的成绩串过来（`readClassOverviewCache(storage, spaceId)`）；缓存内容坏了要**安全退化成空**，不许抛错把页面搞崩。
+
+线上实测（跨境抖动 300~3000ms 的真实环境）：
+
+| 场景 | 改之前 | 改之后 |
+| --- | --- | --- |
+| 第一次打开看板 | 1442ms | 292ms |
+| 第二次打开 | 1459ms | 71ms |
+| 点看板时额外发几次请求 | 1 | 0 |
+
+改完必须 `npm run check:dash-perf` **24/24 通过**再提交。
+
 ### 改「圈出最顺口的词」前必读
 
 卡片图上印着「听一遍，跟读一遍，再圈出读起来最顺口的那个词」—— 圈这个动作以前**只存在于图片里**，代码里没有。现在补上了，改这块前必须知道这几条：
@@ -250,6 +286,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（30 项） |
 | `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
 | `npm run check:account-net` | 账号链路的弱网健壮性：错误归一化纯函数**真跑**（AbortError / Failed to fetch / 服务端中文 / 英文兜底）、默认超时 ≥15s、**对着挂死的本地服务器真跑建班**（必须抛中文人话）、有「ping 预热 + me 校准」一体的同步逻辑、挂载与打开面板都触发它、建班失败会回头刷新班级状态、代码里不出现技术错误串（16 项） |
+| `npm run check:dash-perf` | 「班级看板读取速度」：后端鉴权合 **1 条 JOIN**、看板接口 **1 次查询**、成员表一条 JOIN 带 LIMIT、缓存模块导出齐全、缓存 key 固定、**按班级隔离**、坏 JSON 安全退化、TTL ≥30s、预取节流、看板先读缓存再发请求、慢提示阈值 ≥600ms、看板**会调用**缓存读写、缓存够新不重复打、刷新/改名单强制 `load(true)`、App 在登录态就绪即预取 + 打开面板也预取（24 项） |
 | `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（24 项） |
 | `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
 | `npm run check:flow` | 「学习流程顺序」：**只有两步**（1 听一遍+圈一圈 → 2 跟读一遍）、没有第 3 步、圈出区紧跟卡片、跟读区在最后、徽标位置、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（17 项） |
@@ -266,7 +303,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run check:print; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run check:print; npm run check:account-net; npm run check:dash-perf; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -300,3 +337,10 @@ git add -A; git commit -m "..."; git push origin main
 - **别用 PowerShell 批量正则改 JS 脚本** —— 双引号里的 `$(` 会被当子表达式吃掉，`page.$('.x')` 直接被改坏成 `page..x`，语法全崩。要改就用 edit/write 工具重写整个文件。
 - **仓库里没有 playwright 依赖** —— `scripts/e2e-role-ui.cjs` 自己会去找全局 `node_modules`（含 `NODE_PATH`），找不到就报错退出（exit 2），不会静默跳过。
 - `@vue-macros/nuxt` 那类 reactivity transform 下 `$ref` 变量在 script 里**不能写 `.value`**（静默 undefined）。
+- **跨境单次往返耗时不可控** —— 后端在 `*.pages.dev`、前端在国内，同一个 11 字节的 `/api/health` 在 Chrome 里实测 310~3151ms（抖动 10 倍），`--disable-quic` 无差别（本来就是 http/1.1）。**别再指望「优化接口实现」能压下来**，能压的只有「少跑一趟」+「把等待藏起来」。见上面「改「班级看板」前必读」。
+- **尺子断言「某函数被调用」必须带括号查调用点** —— 只查函数名或只查 import 会假绿（「会写缓存」原来查的是 `writeClassOverviewCache` 这个名字，函数定义本身就命中）。要查 `writeClassOverviewCache(`。本轮退回验证就靠这一条抓出了三条假绿。
+- **退回验证的 patch 必须全局替换** —— 只替换第一处等于没测到那个断言（同一个常量在源码里出现多次）。副本放**纯 ASCII 临时目录**（`%TEMP%`），中文路径下 Node 的 `fs.rmSync` / `fs.cpSync` 会「假成功」—— 报成功但文件还在。
+- **Node `fs.rmSync` / `fs.cpSync` 在含中文的路径上静默失效** —— 报 ok、返回成功，但文件还在 / 目标目录是空的（同一个路径的 `existsSync` / `readFileSync` 却正常）。删改完用 PowerShell `Test-Path` 复核。
+- **SQLite 的 `LIKE 'x\_%'` 不认反斜杠转义** —— 想删 `perf_` 前缀的行要用 `LIKE 'perf%'` 或显式 `ESCAPE` 子句，否则删 0 行还不报错。
+- **Playwright 日志分段打印会有竞态误读** —— 迟到的 response 会被打进上一段日志，看起来像「预取没生效」或「预取在点面板之后才发」。判断时序要用**同一个分段内的连续序号**，别跨段拼时间线。
+- **`wrangler` 走本机代理会报「auth token has expired」** —— 那是代理的 TLS 问题，不是凭据问题。跑 D1 命令前先 `$env:HTTP_PROXY=''; $env:HTTPS_PROXY=''; $env:ALL_PROXY=''; $env:NO_PROXY='*'` 直连。另外 `d1 execute --command` **只执行第一条语句**，多条要拆开跑。

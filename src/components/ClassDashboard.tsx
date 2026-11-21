@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GraduationCap, KeyRound, RefreshCw, UserMinus, X } from 'lucide-react';
 import { getBackend } from '../services/backend';
+import {
+  browserCacheStorage,
+  isClassOverviewFresh,
+  readClassOverviewCache,
+  writeClassOverviewCache,
+} from '../services/backend/class-overview-cache';
 import type { ClassOverview } from '../services/backend/types';
 
 interface ClassDashboardProps {
@@ -9,6 +15,13 @@ interface ClassDashboardProps {
   token: string;
   onClose: () => void;
 }
+
+/**
+ * 慢到什么程度就告诉用户「网络慢」
+ *
+ * 跨境接口单次 223~3151ms 抖动（实测），超过 600ms 就别让人干瞪眼。
+ */
+const SLOW_LOAD_HINT_MS = 600;
 
 function formatTime(iso: string | null): string {
   if (!iso) {
@@ -49,21 +62,69 @@ function isToday(iso: string | null): boolean {
  * 统计只看学生：老师自己不在班级里答题，计进分母会把平均分拉低。
  */
 export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
-  const [overview, setOverview] = useState<ClassOverview | null>(null);
+  // 先亮上一次看过的数据，别让老师干等跨境往返
+  const [overview, setOverview] = useState<ClassOverview | null>(() => {
+    const storage = browserCacheStorage();
+    if (!storage) {
+      return null;
+    }
+    const hit = readClassOverviewCache(storage);
+    return hit ? hit.data : null;
+  });
+  /** 现在看到的是旧数据，后台正在刷新 */
+  const [stale, setStale] = useState<boolean>(() => {
+    const storage = browserCacheStorage();
+    return storage ? readClassOverviewCache(storage) !== null : false;
+  });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  /** 慢到一定程度就告诉用户，别让人干瞪眼 */
+  const [slow, setSlow] = useState<boolean>(false);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<{ name: string; password: string } | null>(null);
+  const slowTimerRef = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     const backend = getBackend();
+    const storage = browserCacheStorage();
+
+    // 缓存够新就别再跑一趟跨境：预取回来的数据正好赶上老师点看板，
+    // 再发一次请求就是白等 300~3000ms。
+    if (!force && storage) {
+      const cached = readClassOverviewCache(storage);
+      if (cached && isClassOverviewFresh(cached.cachedAt, Date.now())) {
+        setOverview(cached.data);
+        setStale(false);
+        setError(null);
+        setRefreshing(false);
+        return;
+      }
+    }
+
+    // 慢提示计时：跨境请求抖起来的时候得给个交代
+    if (slowTimerRef.current !== null) {
+      window.clearTimeout(slowTimerRef.current);
+    }
+    slowTimerRef.current = window.setTimeout(() => {
+      setSlow(true);
+    }, SLOW_LOAD_HINT_MS);
     try {
       const data = await backend.classOverview(token);
       setOverview(data);
+      setStale(false);
       setError(null);
+      // 存下来，下次打开直接秒开
+      if (storage) {
+        writeClassOverviewCache(storage, data.space.id, data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '读取班级看板失败');
     } finally {
+      if (slowTimerRef.current !== null) {
+        window.clearTimeout(slowTimerRef.current);
+        slowTimerRef.current = null;
+      }
+      setSlow(false);
       setRefreshing(false);
     }
   }, [token]);
@@ -76,6 +137,17 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
       await load();
     })();
   }, [open, token, load]);
+
+  // 组件没了就把慢提示计时器收掉，别留个孤儿定时器
+  useEffect(
+    () => () => {
+      if (slowTimerRef.current !== null) {
+        window.clearTimeout(slowTimerRef.current);
+        slowTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   /** 首次打开时还没有数据 = 正在加载 */
   const loading = refreshing || (open && !overview && !error);
@@ -104,7 +176,8 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
     setBusyMemberId(accountId);
     try {
       await backend.removeMember(token, accountId);
-      await load();
+      // 操作完必须看到最新名单，不能拿缓存糊弄
+      await load(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : '移出成员失败');
     } finally {
@@ -121,7 +194,8 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
     try {
       const password = await backend.resetMemberPassword(token, accountId);
       setTempPassword({ name, password });
-      await load();
+      // 操作完必须看到最新名单，不能拿缓存糊弄
+      await load(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : '重置密码失败');
     } finally {
@@ -165,7 +239,8 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
               className="class-dashboard-refresh"
               onClick={() => {
                 setRefreshing(true);
-                void load();
+                // 手动点「刷新」必须强制拉最新，不管缓存多新
+                void load(true);
               }}
             >
               <RefreshCw size={15} />
@@ -177,7 +252,14 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
           </div>
         </header>
 
-        {loading && !overview && <p className="class-dashboard-hint">正在读取班级数据…</p>}
+        {loading && !overview && (
+          <p className="class-dashboard-hint">
+            {slow ? '网络有点慢，还在读班级数据…' : '正在读取班级数据…'}
+          </p>
+        )}
+        {stale && !loading && (
+          <p className="class-dashboard-hint">正在更新班级数据…</p>
+        )}
         {error && <p className="class-dashboard-error">{error}</p>}
 
         {overview && (

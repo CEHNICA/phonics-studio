@@ -136,10 +136,40 @@ export function accountPayload(row: AccountRow): {
   };
 }
 
-interface SessionRow {
-  token_hash: string;
-  account_id: string;
-}
+/**
+ * 鉴权 + 班级身份：一条 SQL 一次查完
+ *
+ * 为什么要合并（2026-11-21 第 10 轮实测）：
+ * 后端跑在 Cloudflare Pages（境外），前端在国内，
+ * 单次跨网络往返实测 223~3151ms，抖动极大。
+ * 原来 requireAuth 是**串行 4 次** D1 查询（session → account → member → space），
+ * 就算每次查询本身只要 0.26ms，4 次往返也把等待翻了好几倍。
+ * 合成一条 JOIN 后，整条鉴权只花一次往返。
+ */
+export const AUTH_LOOKUP_SQL = `
+  SELECT s.token_hash,
+         a.account_id, a.username, a.password_hash, a.salt, a.display_name,
+         a.role AS account_role, a.created_at AS account_created_at,
+         m.space_id AS member_space_id, m.role AS member_role, m.name AS member_name,
+         m.stats_json AS member_stats_json, m.created_at AS member_created_at,
+         m.last_seen_at AS member_last_seen_at, m.revoked_at AS member_revoked_at,
+         sp.space_id, sp.kind AS space_kind, sp.join_code, sp.name AS space_name,
+         sp.owner_account_id, sp.created_at AS space_created_at, sp.revoked_at AS space_revoked_at
+    FROM phonics_sessions s
+    JOIN phonics_accounts a ON a.account_id = s.account_id
+    LEFT JOIN phonics_members m ON m.account_id = a.account_id
+    LEFT JOIN phonics_spaces sp ON sp.space_id = m.space_id
+   WHERE s.token_hash = ?
+   ORDER BY m.created_at ASC
+   LIMIT 1`;
+
+/** 看板成员列表：一条 JOIN 拿完，不是 N+1 */
+export const CLASS_MEMBERS_SQL = `
+  SELECT m.account_id, m.name AS display_name, a.username, m.role, m.stats_json,
+         m.created_at, m.last_seen_at, m.revoked_at
+    FROM phonics_members m
+    LEFT JOIN phonics_accounts a ON a.account_id = m.account_id
+   WHERE m.space_id = ? ORDER BY m.created_at ASC LIMIT 200`;
 
 interface SpaceRow {
   space_id: string;
@@ -336,38 +366,75 @@ async function readToken(request: Request): Promise<string> {
   return '';
 }
 
+interface AuthLookupRow {
+  token_hash: string;
+  account_id: string;
+  username: string;
+  password_hash: string;
+  salt: string;
+  display_name: string;
+  account_role: string | null;
+  account_created_at: string;
+  member_space_id: string | null;
+  member_role: string | null;
+  member_name: string | null;
+  member_stats_json: string | null;
+  member_created_at: string | null;
+  member_last_seen_at: string | null;
+  member_revoked_at: string | null;
+  space_id: string | null;
+  space_kind: string | null;
+  join_code: string | null;
+  space_name: string | null;
+  owner_account_id: string | null;
+  space_created_at: string | null;
+  space_revoked_at: string | null;
+}
+
 async function requireAuth(request: Request, env: Env): Promise<AuthContext | null> {
   const token = await readToken(request);
   if (!token) {
     return null;
   }
   const tokenHash = await hashToken(token);
-  const session = await env.DB.prepare(
-    'SELECT token_hash, account_id FROM phonics_sessions WHERE token_hash = ?',
-  )
-    .bind(tokenHash)
-    .first<SessionRow>();
-  if (!session) {
+  // 一次查完：会话 + 账号 + 班级成员身份 + 班级信息（别再串行四次）
+  const row = await env.DB.prepare(AUTH_LOOKUP_SQL).bind(tokenHash).first<AuthLookupRow>();
+  if (!row || !row.account_id) {
     return null;
   }
-  const account = await env.DB.prepare(
-    'SELECT * FROM phonics_accounts WHERE account_id = ?',
-  )
-    .bind(session.account_id)
-    .first<AccountRow>();
-  if (!account) {
-    return null;
+  const account: AccountRow = {
+    account_id: row.account_id,
+    username: row.username,
+    password_hash: row.password_hash,
+    salt: row.salt,
+    display_name: row.display_name,
+    role: row.account_role ?? undefined,
+    created_at: row.account_created_at,
+  };
+  let membership: MemberRow | null = null;
+  if (row.member_space_id) {
+    membership = {
+      account_id: row.account_id,
+      space_id: row.member_space_id,
+      role: row.member_role ?? 'student',
+      name: row.member_name ?? '',
+      stats_json: row.member_stats_json ?? '{}',
+      created_at: row.member_created_at ?? '',
+      last_seen_at: row.member_last_seen_at,
+      revoked_at: row.member_revoked_at,
+    };
   }
-  const membership = await env.DB.prepare(
-    'SELECT * FROM phonics_members WHERE account_id = ?',
-  )
-    .bind(account.account_id)
-    .first<MemberRow>();
   let space: SpaceRow | null = null;
-  if (membership) {
-    space = await env.DB.prepare('SELECT * FROM phonics_spaces WHERE space_id = ?')
-      .bind(membership.space_id)
-      .first<SpaceRow>();
+  if (membership && row.space_id) {
+    space = {
+      space_id: row.space_id,
+      kind: row.space_kind ?? 'class',
+      join_code: row.join_code,
+      name: row.space_name ?? '',
+      owner_account_id: row.owner_account_id,
+      created_at: row.space_created_at ?? '',
+      revoked_at: row.space_revoked_at,
+    };
   }
   return { account, membership, space };
 }
@@ -703,13 +770,7 @@ async function handleClassOverview(request: Request, env: Env): Promise<Response
     return fail('这个班级已经被撤销了', 403);
   }
 
-  const result = await env.DB.prepare(
-    `SELECT m.account_id, m.name AS display_name, a.username, m.role, m.stats_json,
-            m.created_at, m.last_seen_at, m.revoked_at
-       FROM phonics_members m
-       LEFT JOIN phonics_accounts a ON a.account_id = m.account_id
-      WHERE m.space_id = ? ORDER BY m.created_at ASC LIMIT 200`,
-  )
+  const result = await env.DB.prepare(CLASS_MEMBERS_SQL)
     .bind(auth.space.space_id)
     .all<{
       account_id: string;
