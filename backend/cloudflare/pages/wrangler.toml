@@ -1,0 +1,9 @@
+name = "phonics-studio-api"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "./public"
+
+# D1 绑定：与 worker.ts 共用同一个库
+[[d1_databases]]
+binding = "DB"
+database_name = "phonics-studio"
+database_id = "2cab268b-841c-431e-9301-73007d45405b"

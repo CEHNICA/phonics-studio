@@ -90,18 +90,30 @@ print/    A4 打印版测验表（HTML + PDF）
 
 ### 接入 Cloudflare Workers + D1（推荐，国内访问稳）
 
+> ⚠️ **不要用 `*.workers.dev`**：中国大陆对 `*.workers.dev` 做了 DNS 污染 + TLS 重置，国内用户根本连不上。
+> 线上站点在国内（`*.space.mcode.cn`）时，后端必须走 `*.pages.dev`（Cloudflare Pages Function，同一个账号、同一个 D1 绑定、未被拦截）。
+
 ```bash
 cd backend/cloudflare
 npx wrangler d1 create phonics-studio        # 把返回的 database_id 填进 wrangler.toml
 npx wrangler d1 execute phonics-studio --file=./schema.sql
-npx wrangler deploy                           # 拿到 https://xxx.workers.dev
+
+# 方式 A：Pages Function（国内可用，推荐）
+cd pages
+npx wrangler pages project create phonics-studio-api
+npx wrangler pages deploy ./public --project-name phonics-studio-api
+# → https://phonics-studio-api.pages.dev
+
+# 方式 B：传统 Worker（仅海外/已自备可达域名时使用）
+cd ..
+npx wrangler deploy                           # → https://xxx.workers.dev
 ```
 
 然后在项目根建 `.env`：
 
 ```
 VITE_BACKEND_KIND=worker
-VITE_BACKEND_URL=https://xxx.workers.dev
+VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 ```
 
 ### 接入 Supabase
