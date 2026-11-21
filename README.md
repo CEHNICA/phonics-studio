@@ -175,7 +175,21 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 - 48 个视频全部重编码为 **640×360 / h264 main / CRF 27 / faststart**，总体积 **15.19 MB → 1.44 MB（-90.5%）**，单文件 60 KB 以内
 - 每个视频配一张 **首帧封面** `public/assets/poster/*.jpg`（约 15 KB），`<video>` 加 `poster` + `preload="metadata"`，视频没下完也先有画面，不再是黑屏转圈
 
-改动前后的量化对照由 `scripts/check-video-perf.ts` 把关（`npm run check:video`，7 项断言），涉及视频素材或 `<video>` 标签时必跑。
+改动前后的量化对照由 `scripts/check-video-perf.ts` 把关（`npm run check:video`，8 项断言），涉及视频素材或 `<video>` 标签时必跑。
+
+## 音频加载性能
+
+「听标准发音」「只听纯音频」「单词热点」走的是同一套阿里云 OSS + CDN，同样有 `Cache-Control: no-store`（浏览器不落盘缓存）+ 边缘缓存 30 天两个约束，所以**音频体积就是点击到出声的延迟**。
+
+- 48 个音标发音：**44.1 kHz 立体声 105 kbps → 24 kHz 单声道 48 kbps**，578 KB → **307 KB（-47%）**，单文件 9 KB 以内
+- 190 个单词朗读：**32 kHz 立体声 → 24 kHz 单声道 32 kbps**，1.44 MB → **800 KB（-45%）**，单文件 6 KB 以内
+- 播放策略（`src/hooks/useAudioPlayer.ts`）：
+  - 预加载走**队列 + 并发上限 2**。国内弱网下并发预载会互相抢带宽，反而把「马上要点的那一个」拖慢；队列先进先出，音标音频天然排在单词前面
+  - 预加载缓存上限 **16** 个，淘汰时同步摘掉排队项
+  - 播放时若还没缓冲够，界面亮 **「加载中」**（`pendingKey`），而不是让用户以为点了没反应
+  - 单词音频缺失时平滑降级到浏览器 TTS 朗读
+
+量化对照与约束由 `scripts/check-audio-perf.ts` 把关（`npm run check:audio`，14 项断言），涉及音频素材或播放逻辑时必跑。
 
 ## 重新生成音素声学模板
 
@@ -189,7 +203,7 @@ node scripts/build-phoneme-templates.ts
 
 ## 素材与授权
 
-仓库自带全部音频、视频与手绘图素材（`public/assets/`，约 23 MB），用于教学演示场景。**若要商用或二次分发，请先确认每份素材的原始授权**；本仓库的 MIT 协议只覆盖代码，不自动覆盖第三方素材的版权。
+仓库自带全部音频、视频与手绘图素材（`public/assets/`，约 9.1 MB，其中手绘卡片图 5.9 MB、视频 1.4 MB、单词音频 0.8 MB、音标音频 0.3 MB、视频封面 0.7 MB），用于教学演示场景。**若要商用或二次分发，请先确认每份素材的原始授权**；本仓库的 MIT 协议只覆盖代码，不自动覆盖第三方素材的版权。
 
 ## 许可
 

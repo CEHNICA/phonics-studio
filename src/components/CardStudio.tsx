@@ -71,7 +71,7 @@ export function CardStudio({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const speakTimerRef = useRef<number | null>(null);
-  const { playingId, speakingWord, playPhonemeAudio, speakWord, preloadWords, preloadUrls } =
+  const { playingId, speakingWord, pendingKey, playPhonemeAudio, speakWord, preloadWords, preloadUrls } =
     useAudioPlayer();
   const recorder = useVoiceRecorder(currentPhonemeId);
 
@@ -249,6 +249,8 @@ export function CardStudio({
   };
 
   const isPlayingCurrentAudio = playingId === currentPhoneme.id;
+  /** 音频还在下载、没出声时给出「加载中」反馈，避免用户以为点了没反应 */
+  const isPendingPhoneme = pendingKey === `phoneme:${currentPhoneme.id}`;
 
   return (
     <div className="studio-layout">
@@ -285,8 +287,14 @@ export function CardStudio({
             >
               <Volume2 size={18} />
               <span>
-                {isPlayingCurrentAudio ? '正在播放...' : '听标准发音'}
-                {!isPlayingCurrentAudio && <span className="desktop-only-hint"> (空格)</span>}
+                {isPlayingCurrentAudio
+                  ? '正在播放...'
+                  : isPendingPhoneme
+                    ? '加载中...'
+                    : '听标准发音'}
+                {!isPlayingCurrentAudio && !isPendingPhoneme && (
+                  <span className="desktop-only-hint"> (空格)</span>
+                )}
               </span>
             </button>
 
@@ -344,11 +352,12 @@ export function CardStudio({
 
                 {currentPhoneme.cardWords.map((word, index) => {
                   const isSpeakingCardWord = speakingWord === word;
+                  const isPendingCardWord = pendingKey === `word:${word.trim().toLowerCase()}`;
                   return (
                     <button
                       key={`${currentPhoneme.id}-hotspot-${word}`}
                       type="button"
-                      className={`card-word-hotspot ${isSpeakingCardWord ? 'speaking' : ''}`}
+                      className={`card-word-hotspot ${isSpeakingCardWord ? 'speaking' : ''} ${isPendingCardWord ? 'pending' : ''}`}
                       style={{ left: CARD_HOTSPOT_LEFT_POSITIONS[index] }}
                       onClick={() => speakWord(word)}
                       title={`点击朗读单词 ${word}`}
@@ -356,7 +365,9 @@ export function CardStudio({
                     >
                       <span className="hotspot-speaker-pill">
                         <Volume2 size={12} />
-                        <span>{isSpeakingCardWord ? '朗读中' : word}</span>
+                        <span>
+                          {isSpeakingCardWord ? '朗读中' : isPendingCardWord ? '加载中' : word}
+                        </span>
                       </span>
                     </button>
                   );
@@ -695,7 +706,7 @@ export function CardStudio({
                   onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
                 >
                   <Volume2 size={15} />
-                  <span>只听纯音频</span>
+                  <span>{isPendingPhoneme ? '加载中...' : '只听纯音频'}</span>
                 </button>
               </div>
             </div>

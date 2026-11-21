@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const MAX_PRELOAD_CACHE = 40;
+/** 预加载缓存上限：只保留最近用到的少量音频，避免长期占用内存 */
+const MAX_PRELOAD_CACHE = 16;
+/**
+ * 同时最多并行下载的音频数。
+ * 国内弱网下并发预载会互相抢带宽，反而把「马上要听的那个」拖慢，
+ * 所以压到 2 个，队列先进先出，音标音频天然排在最前面。
+ */
+const MAX_PARALLEL_PRELOAD = 2;
 
 /**
  * 使用浏览器 Web Speech API 作为本地 MP3 不可用时的降级兜底朗读
@@ -41,8 +48,15 @@ function fallbackSpeakWithSynthesis(
 export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  /** 等待下载的音频队列 */
+  const queueRef = useRef<string[]>([]);
+  /** 正在并行下载的音频数 */
+  const activeRef = useRef(0);
+  const pumpRef = useRef<() => void>(() => {});
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [speakingWord, setSpeakingWord] = useState<string | null>(null);
+  /** 正在等待下载、尚未出声的音频标识（如 `phoneme:long-i` / `word:tea`） */
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   const stopAudio = useCallback(() => {
     if (audioRef.current) {
@@ -52,29 +66,60 @@ export function useAudioPlayer() {
     }
     setPlayingId(null);
     setSpeakingWord(null);
+    setPendingKey(null);
   }, []);
+
+  /**
+   * 从队列里取音频开始下载，最多同时 MAX_PARALLEL_PRELOAD 个
+   */
+  const pumpPreloadQueue = useCallback(() => {
+    while (activeRef.current < MAX_PARALLEL_PRELOAD && queueRef.current.length > 0) {
+      const url = queueRef.current.shift();
+      if (!url) break;
+      const cache = preloadCacheRef.current;
+      if (cache.has(url)) continue;
+
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      activeRef.current += 1;
+      const release = () => {
+        activeRef.current = Math.max(0, activeRef.current - 1);
+        pumpRef.current();
+      };
+      audio.addEventListener('canplay', release, { once: true });
+      audio.addEventListener('error', release, { once: true });
+      cache.set(url, audio);
+      audio.load();
+    }
+  }, []);
+
+  // 在 effect 里挂接自引用，避免渲染期写 ref（StrictMode 双渲染下时序才可靠）
+  useEffect(() => {
+    pumpRef.current = pumpPreloadQueue;
+  }, [pumpPreloadQueue]);
 
   /**
    * 预加载一批音频 URL，消除首次点击播放延迟
    */
   const preloadUrls = useCallback((urls: string[]) => {
     const cache = preloadCacheRef.current;
+    const queue = queueRef.current;
     for (const url of urls) {
-      if (cache.has(url)) {
+      if (cache.has(url) || queue.includes(url)) {
         continue;
       }
-      if (cache.size >= MAX_PRELOAD_CACHE) {
-        const firstKey = cache.keys().next().value;
-        if (firstKey) {
-          cache.delete(firstKey);
-        }
-      }
-      const audio = new Audio(url);
-      audio.preload = 'auto';
-      audio.load();
-      cache.set(url, audio);
+      queue.push(url);
     }
-  }, []);
+    // 淘汰超出上限的旧缓存（同时把它的排队项摘掉）
+    while (cache.size >= MAX_PRELOAD_CACHE) {
+      const oldest = cache.keys().next().value;
+      if (!oldest) break;
+      cache.delete(oldest);
+      const idx = queue.indexOf(oldest);
+      if (idx >= 0) queue.splice(idx, 1);
+    }
+    pumpPreloadQueue();
+  }, [pumpPreloadQueue]);
 
   /**
    * 预加载当前卡片涉及的所有英语单词本地 MP3
@@ -84,7 +129,7 @@ export function useAudioPlayer() {
       const urls = words
         .map((word) => word.trim().toLowerCase())
         .filter(Boolean)
-        .map((normalized) => `/assets/words/${encodeURIComponent(normalized)}.mp3`);
+        .map((normalized) => `/assets/words/${encodeURIComponent(normalized)}.v2.mp3`);
       preloadUrls(urls);
     },
     [preloadUrls],
@@ -101,15 +146,25 @@ export function useAudioPlayer() {
       audio.currentTime = 0;
       audioRef.current = audio;
       setPlayingId(id);
+      // 还没缓冲够就先亮「加载中」，别让用户以为点了没反应
+      if (audio.readyState < 3) {
+        setPendingKey(`phoneme:${id}`);
+      }
 
       audio.onended = () => {
+        setPendingKey(null);
         setPlayingId((prev) => (prev === id ? null : prev));
       };
+      audio.onplaying = () => {
+        setPendingKey(null);
+      };
       audio.onerror = () => {
+        setPendingKey(null);
         setPlayingId((prev) => (prev === id ? null : prev));
       };
 
       void audio.play().catch(() => {
+        setPendingKey(null);
         setPlayingId(null);
       });
     },
@@ -128,18 +183,26 @@ export function useAudioPlayer() {
         return;
       }
 
-      const localSrc = `/assets/words/${encodeURIComponent(normalized)}.mp3`;
+      const localSrc = `/assets/words/${encodeURIComponent(normalized)}.v2.mp3`;
       const cached = preloadCacheRef.current.get(localSrc);
       const audio = cached ?? new Audio(localSrc);
       audio.currentTime = 0;
       audioRef.current = audio;
       setSpeakingWord(word);
+      if (audio.readyState < 3) {
+        setPendingKey(`word:${normalized}`);
+      }
 
       audio.onended = () => {
+        setPendingKey(null);
         setSpeakingWord((prev) => (prev === word ? null : prev));
+      };
+      audio.onplaying = () => {
+        setPendingKey(null);
       };
       audio.onerror = () => {
         // NOTE: 若本地单词音频缺失，则平滑降级到浏览器 TTS
+        setPendingKey(null);
         fallbackSpeakWithSynthesis(
           word,
           () => setSpeakingWord(word),
@@ -148,6 +211,7 @@ export function useAudioPlayer() {
       };
 
       void audio.play().catch(() => {
+        setPendingKey(null);
         fallbackSpeakWithSynthesis(
           word,
           () => setSpeakingWord(word),
@@ -170,6 +234,7 @@ export function useAudioPlayer() {
   return {
     playingId,
     speakingWord,
+    pendingKey,
     playPhonemeAudio,
     speakWord,
     preloadWords,

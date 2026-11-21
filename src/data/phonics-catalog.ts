@@ -84,7 +84,7 @@ export const PHONEMES: PhonemeItem[] = dataset.phonemes.map((item, index) => {
     categoryTitle: category?.title ?? item.category,
     // NOTE: 附加版本参数防止浏览器缓存旧尺寸卡片导致热区错位
     cardSrc: `/assets/cards/${item.id}.png?v=2`,
-    localAudioSrc: `/assets/sound/${item.id}.mp3`,
+    localAudioSrc: `/assets/sound/${item.id}.v2.mp3`,
     // NOTE: v2 = 640x360 重编码版。文件名带版本号是为了绕开阿里 CDN 对旧文件的
     // 30 天边缘缓存（源站 Cache-Control: no-store 只管浏览器，管不了 CDN）
     localVideoSrc: `/assets/video/${item.id}.v2.mp4`,

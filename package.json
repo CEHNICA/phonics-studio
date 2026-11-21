@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "test": "node scripts/test-consolidation.ts",
     "check:video": "node scripts/check-video-perf.ts",
+    "check:audio": "node scripts/check-audio-perf.ts",
     "preview": "vite preview"
   },
   "dependencies": {
