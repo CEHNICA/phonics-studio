@@ -62,6 +62,8 @@ export type BackendState = 'local' | 'connecting' | 'synced' | 'offline' | 'erro
 /** 看板里的一名成员 */
 export interface ClassMemberSummary {
   accountId: string;
+  /** 登录用户名 */
+  username?: string;
   /** 成员显示名 */
   name: string;
   role: AccountRole;

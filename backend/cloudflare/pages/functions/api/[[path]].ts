@@ -620,13 +620,17 @@ async function handleClassOverview(request: Request, env: Env): Promise<Response
   }
 
   const result = await env.DB.prepare(
-    `SELECT account_id, name, role, stats_json, created_at, last_seen_at, revoked_at
-       FROM phonics_members WHERE space_id = ? ORDER BY created_at ASC LIMIT 200`,
+    `SELECT m.account_id, m.name AS display_name, a.username, m.role, m.stats_json,
+            m.created_at, m.last_seen_at, m.revoked_at
+       FROM phonics_members m
+       LEFT JOIN phonics_accounts a ON a.account_id = m.account_id
+      WHERE m.space_id = ? ORDER BY m.created_at ASC LIMIT 200`,
   )
     .bind(auth.space.space_id)
     .all<{
       account_id: string;
-      name: string;
+      display_name: string;
+      username: string | null;
       role: string;
       stats_json: string;
       created_at: string;
@@ -643,7 +647,8 @@ async function handleClassOverview(request: Request, env: Env): Promise<Response
     }
     return {
       accountId: row.account_id,
-      username: row.name,
+      username: row.username || row.account_id,
+      name: row.display_name || row.username || row.account_id,
       role: row.role,
       completed: stats.completed ?? 0,
       learned: stats.learned ?? 0,
