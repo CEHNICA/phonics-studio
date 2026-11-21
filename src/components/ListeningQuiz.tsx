@@ -893,7 +893,7 @@ export function ListeningQuiz({
                     }
                     return (
                       <p className="feedback-codename">
-                        你的代号词：<strong>{myCode}</strong>
+                        你圈出的词：<strong>{myCode}</strong>
                         <button
                           type="button"
                           className="mini-speak-word-btn"

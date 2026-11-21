@@ -561,6 +561,48 @@ button {
   cursor: pointer;
 }
 
+/* ---------- 红笔圈：把选中的词在卡片上圈出来 ---------- */
+/*
+ * 坐标系：viewBox="0 0 1050 623" 与卡片图原始像素一致，
+ * preserveAspectRatio="none" 让 SVG 铺满图片盒子 → 圈和词像素级对齐。
+ * pointer-events: none —— 圈层不能挡住卡片热点的「点词朗读」。
+ */
+.card-circle-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.card-circle-layer .card-circle-stroke ellipse,
+.card-circle-layer .card-circle-stroke path {
+  fill: none;
+  stroke: #e0384a;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(224, 56, 74, 0.28));
+}
+
+.card-circle-layer .card-circle-stroke {
+  animation: card-circle-pop 0.34s ease-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes card-circle-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
 @keyframes tap-bounce {
   0% {
     transform: scale(1);
@@ -3540,6 +3582,7 @@ button {
  */
 @media (prefers-reduced-motion: reduce) {
   .illustrated-card-inner.tap-bounce,
+  .card-circle-layer .card-circle-stroke,
   .card-homework-box.codename-box.named-flash,
   .codename-toast,
   .match-result-panel.score-celebrate,

@@ -157,6 +157,30 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 改完必须 `npm run check:role` **29/29 通过**再提交。
 
+### 改「圈出最顺口的词」前必读
+
+卡片图上印着「听一遍，跟读一遍，再圈出读起来最顺口的那个词」—— 圈这个动作以前**只存在于图片里**，代码里没有。现在补上了，改这块前必须知道这几条：
+
+1. **圈的坐标不是写死的常量，是每张卡一套槽位。** 各卡词行 cy 在 495~510 之间浮动，`s` 卡还会定位失败，所以不能用一个中位数常量糊弄。槽位由 `scripts/derive-card-word-slots.ts` 从卡片素材实测推导（ffmpeg 解灰度 → 找词文字行 → 列聚类），生成 `src/data/card-word-slots.ts`。**换卡片素材必须重新生成**：
+
+   ```powershell
+   node scripts/derive-card-word-slots.ts --write src/data/card-word-slots.ts
+   ```
+
+2. **坐标系必须锁死 `viewBox="0 0 1050 623"` + `preserveAspectRatio="none"`。** 卡片图就是 1050×623，SVG 用同一套 viewBox 才能和词像素级对齐；`preserveAspectRatio="none"` 让 SVG 铺满图片盒子（图片本身 `width:100%; height:auto`，比例不变）。
+
+3. **圈层必须 `pointer-events: none`。** 否则圈会盖住卡片热点的「点词朗读」。
+
+4. **圈只认卡片上印着的三个词。** 用户自己写的词不在卡片上 → `circleSlotFor` 返回 -1 → 不画圈（但词仍然被记住）。
+
+5. **状态只有一个源：`currentProgress.representativeWord`。** 圈完全由它驱动，**不新增字段、不做 D1 迁移**（这个字段早就随进度同步到后端 `stats_json`）。
+
+6. **卡片上点词仍然只朗读，不改答案。** 「圈」的唯一入口是下方 A/B/C 那一排；再点同一个 chip = 取消圈（toggle）。
+
+改完必须 `npm run check:circle` **23/23 通过** + `node scripts/e2e-card-circle.ts` **18/18 通过**再提交。
+
+**坑：卡片插画里本来就有大面积红色**（苹果、船…）。做像素级验证时不能全图找红像素 —— 会把插画当成圈。必须先取圈层 `<ellipse>` 的屏幕矩形，只在那一个窗口里找红像素。
+
 ### 体检器（尺子）
 
 | 命令 | 管什么 |
@@ -169,6 +193,8 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:motion` | 动效：无 infinite 无限动画、存在 `prefers-reduced-motion` 降级、动画类全被覆盖、forwards 终态同时 `display:none`（4 项） |
 | `npm run check:role` | 账号身份/班级权限：邀请码判定（真跑纯函数）、建班门禁、role 落库、三个接口都返回身份、会话保留身份、**学生看不到「创建班级」**、文案说人话（29 项） |
 | `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
+| `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（23 项） |
+| `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
@@ -180,7 +206,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:role-e2e; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```

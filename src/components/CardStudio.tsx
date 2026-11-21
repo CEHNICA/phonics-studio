@@ -14,12 +14,14 @@ import {
   Volume2,
 } from 'lucide-react';
 import { PHONEME_MAP, PHONEMES, getRelatedConfusableIds } from '../data/phonics-catalog';
+import { CARD_SLOT_DATA } from '../data/card-word-slots';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
 import type { PronunciationComparisonResult } from '../utils/pronunciation-analyzer';
 import { resumeSharedAudioContext } from '../utils/audio-context';
 import { playScoreCelebrateSfx, playSelectWordSfx } from '../utils/sound-effects';
+import { circleSlotFor, type CircleSlot } from '../utils/card-circle';
 import { PhonemeSidebar, type ProgressFilter } from './PhonemeSidebar';
 
 interface CardStudioProps {
@@ -40,6 +42,20 @@ interface CardStudioProps {
 const CARD_OPTION_LETTERS = ['A', 'B', 'C'];
 
 const CARD_HOTSPOT_LEFT_POSITIONS = ['3.47%', '35.07%', '66.67%'];
+
+/**
+ * 手绘红圈的「出头」弧线：真笔圈字会多甩出一小截尾巴。
+ * 用一段从 205° 扫到 25° 的椭圆弧模拟，画在同一个 viewBox 坐标系里。
+ */
+function circleOvershootPath(slot: CircleSlot): string {
+  const start = (205 * Math.PI) / 180;
+  const end = (25 * Math.PI) / 180;
+  const x0 = slot.cx + slot.rx * Math.cos(start);
+  const y0 = slot.cy + slot.ry * Math.sin(start);
+  const x1 = slot.cx + slot.rx * Math.cos(end);
+  const y1 = slot.cy + slot.ry * Math.sin(end);
+  return `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${slot.rx} ${slot.ry} 0 1 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
 
 /**
  * 核心互动学习工作台：手绘卡片 + 音频 + 口型视频 + 跟读录音
@@ -108,6 +124,11 @@ export function CardStudio({
 
   const currentPhoneme = PHONEME_MAP[currentPhonemeId] ?? PHONEMES[0];
   const currentProgress = getPhonemeProgress(currentPhoneme.id);
+  /** 卡片上圈的是第几个词（A=0）。只认卡片上印着的三个词，自己写的词不画圈 */
+  const circledWordIndex = circleSlotFor(currentProgress.representativeWord, currentPhoneme.cardWords);
+  /** 每张卡片的词位置都不一样，取不到就退回通用槽位 */
+  const circleSlots = CARD_SLOT_DATA.cards[currentPhoneme.id] ?? CARD_SLOT_DATA.fallback;
+  const circleSlot = circledWordIndex >= 0 ? (circleSlots[circledWordIndex] ?? null) : null;
   const relatedIds = useMemo(
     () => getRelatedConfusableIds(currentPhoneme.id),
     [currentPhoneme.id],
@@ -279,6 +300,12 @@ export function CardStudio({
   const handleSelectRepresentativeChip = (word: string) => {
     void resumeSharedAudioContext();
     playSelectWordSfx();
+    // 再点同一个词 = 取消圈画（把圈擦掉）
+    if (currentProgress.representativeWord === word) {
+      onSetRepresentativeWord(currentPhoneme.id, '');
+      setNamedFlash(false);
+      return;
+    }
     onSetRepresentativeWord(currentPhoneme.id, word);
     setNamedFlash(true);
     window.setTimeout(() => setNamedFlash(false), 700);
@@ -395,7 +422,7 @@ export function CardStudio({
 
         {/* 双栏主学习区 */}
         <div className="studio-grid">
-          {/* 左栏：手绘卡片 → 跟读模仿 → 代号词（可选） */}
+          {/* 左栏：手绘卡片 → 跟读模仿 → 圈出最顺口的词 */}
           <section className="card-stage-panel">
             <div className="illustrated-card-frame">
               <div className={`illustrated-card-inner ${cardPulse ? 'tap-bounce' : ''}`}>
@@ -406,6 +433,31 @@ export function CardStudio({
                   onClick={handlePlayPhonemeFromCard}
                   title="点击卡片空白/顶部区域听音标发音"
                 />
+
+                {/* 红笔圈：把选中的那个词在卡片上圈出来（坐标系与卡片图 1050x623 像素级对齐） */}
+                {circleSlot && (
+                  <svg
+                    className="card-circle-layer"
+                    viewBox="0 0 1050 623"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <g className="card-circle-stroke">
+                      <ellipse
+                        cx={circleSlot.cx}
+                        cy={circleSlot.cy}
+                        rx={circleSlot.rx}
+                        ry={circleSlot.ry}
+                        transform={`rotate(-3 ${circleSlot.cx} ${circleSlot.cy})`}
+                      />
+                      <path
+                        d={circleOvershootPath(circleSlot)}
+                        transform={`rotate(-3 ${circleSlot.cx} ${circleSlot.cy})`}
+                      />
+                    </g>
+                  </svg>
+                )}
 
                 {currentPhoneme.cardWords.map((word, index) => {
                   const isSpeakingCardWord = speakingWord === word;
@@ -642,18 +694,18 @@ export function CardStudio({
                 </div>
               )}
             </div>
-            {/* 代号词：可选记忆锚点，不挡主流程 */}
+            {/* 圈出最顺口的词：红圈画在卡片上那个词的位置 */}
             <div className={`card-homework-box codename-box ${namedFlash ? 'named-flash' : ''}`}>
               <div className="homework-row">
                 <div className="homework-label-row">
                   <div className="codename-title-block">
-                    <span className="homework-title">给这个音起个代号（可选）</span>
-                    <span className="codename-hint">记住一个词，以后看到音标就想起它</span>
+                    <span className="homework-title">圈出读起来最顺口的那个词</span>
+                    <span className="codename-hint">点下面的词，就会在卡片上把它圈出来</span>
                   </div>
                   <div className="homework-status-actions">
                     {currentProgress.representativeWord && (
                       <span className="selected-rep-badge codename-live">
-                        代号：{currentProgress.representativeWord}
+                        圈出：{currentProgress.representativeWord}
                       </span>
                     )}
                     <button
@@ -683,8 +735,8 @@ export function CardStudio({
                         onClick={() => handleSelectRepresentativeChip(word)}
                         title={
                           isSuggested
-                            ? `推荐代号 ${word}（点一下就记住）`
-                            : `设为代号并朗读 ${word}`
+                            ? `推荐 ${word}（点一下就圈出来）`
+                            : `圈出 ${word} 并朗读`
                         }
                       >
                         <Volume2 size={13} />
@@ -699,7 +751,7 @@ export function CardStudio({
 
                 {namedFlash && currentProgress.representativeWord && (
                   <p className="codename-toast" role="status">
-                    好，以后 {currentPhoneme.symbol} 就是「{currentProgress.representativeWord}」
+                    圈好了：{currentProgress.representativeWord}
                   </p>
                 )}
 
@@ -708,7 +760,7 @@ export function CardStudio({
                   className="codename-custom-toggle"
                   onClick={() => setShowCustomName((prev) => !prev)}
                 >
-                  {showCustomName ? '收起自己写' : '自己写一个代号'}
+                  {showCustomName ? '收起自己写' : '自己写一个词'}
                 </button>
 
                 {showCustomName && (
