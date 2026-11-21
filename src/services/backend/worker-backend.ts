@@ -1,35 +1,40 @@
 /**
- * Cloudflare Workers / Pages Functions + D1 后端
+ * Cloudflare Pages Functions + D1 后端（账号体系）
  *
- * 约定的接口（配套实现见 backend/cloudflare/pages/functions/api/[[path]].ts）：
- * - GET  {base}/api/state   带请求头 x-phonics-key  → { version, userKey, state, updatedAt } 或 404
- * - PUT  {base}/api/state   带请求头 x-phonics-key  → 覆盖写入整份状态
- * - GET  {base}/api/health  → 200 表示服务在线
- * - POST {base}/api/space/create   → 创建班级 / 个人空间，返回班级码 + 管理码 + 恢复密钥
- * - POST {base}/api/member/join    → 用班级码加入班级
- * - POST {base}/api/member/recover → 用恢复密钥找回本人身份
- * - GET  {base}/api/class/overview 带请求头 x-phonics-owner → 班级看板
- * - POST {base}/api/member/revoke  带请求头 x-phonics-owner → 移出某个成员
- * - POST {base}/api/space/revoke   带请求头 x-phonics-owner → 撤销整个班级
+ * 接口（配套实现见 backend/cloudflare/pages/functions/api/[[path]].ts）：
+ * - POST /api/auth/register        {username,password,displayName?} → {token,account,membership}
+ * - POST /api/auth/login           {username,password}             → {token,account,membership}
+ * - POST /api/auth/logout          (token)                        → {ok}
+ * - POST /api/auth/password        (token) {oldPassword,newPassword} → {ok}
+ * - GET  /api/me                   (token)                        → {account,membership}
+ * - GET  /api/state                (token)                        → {version,accountId,state,updatedAt} | 404
+ * - PUT  /api/state                (token) {state}                → {ok,updatedAt}
+ * - POST /api/class/create         (token) {name}                 → {spaceId,name,joinCode}
+ * - POST /api/member/join          (token) {joinCode}             → {spaceId,spaceName,role}
+ * - GET  /api/class/overview       (token, 仅老师)                → {space,members}
+ * - POST /api/member/remove        (token, 仅老师) {accountId}    → {ok}
+ * - POST /api/member/reset-password(token, 仅老师) {accountId}    → {ok,tempPassword}
+ * - POST /api/class/revoke         (token, 仅老师)                → {ok}
+ * - POST /api/class/leave          (token)                        → {ok,revokedClass}
+ *
+ * 鉴权：请求头 x-phonics-token（或 Authorization: Bearer）。
  */
 
 import type {
+  AuthResult,
   BackendProvider,
+  ClassCreateResult,
+  ClassJoinResult,
+  ClassLeaveResult,
   ClassOverview,
-  MemberRecoverInput,
-  MemberRecoverResult,
-  SpaceCreateInput,
-  SpaceCreateResult,
-  SpaceJoinInput,
-  SpaceJoinResult,
+  LoginInput,
+  RegisterInput,
   UserStatePayload,
 } from './types';
 import { STATE_VERSION } from './types';
-import { loadIdentity } from './space-client';
 
 const REQUEST_TIMEOUT_MS = 8000;
-const USER_KEY_HEADER = 'x-phonics-key';
-const OWNER_KEY_HEADER = 'x-phonics-owner';
+const TOKEN_HEADER = 'x-phonics-token';
 
 function trimBase(url: string): string {
   return url.trim().replace(/\/+$/, '');
@@ -53,12 +58,12 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
  */
 async function readError(response: Response, fallback: string): Promise<Error> {
   try {
-    const data = (await response.json()) as { message?: string; error?: string };
-    if (data?.message) {
-      return new Error(data.message);
+    const data = (await response.json()) as { error?: string; code?: string };
+    if (data?.code === 'revoked') {
+      return new Error('你已被移出这个班级，云端不再接收数据');
     }
-    if (data?.error === 'revoked') {
-      return new Error('你已被移出这个班级');
+    if (data?.error) {
+      return new Error(data.error);
     }
   } catch {
     // 忽略解析失败，用兜底文案
@@ -72,8 +77,20 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
   /**
    * 发一个 JSON 请求并解析响应；非 2xx 时抛出带服务端文案的错误
    */
-  async function requestJson<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
-    const response = await fetchWithTimeout(`${base}${path}`, init);
+  async function requestJson<T>(
+    path: string,
+    init: RequestInit,
+    fallback: string,
+    token?: string,
+  ): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((init.headers as Record<string, string>) ?? {}),
+    };
+    if (token) {
+      headers[TOKEN_HEADER] = token;
+    }
+    const response = await fetchWithTimeout(`${base}${path}`, { ...init, headers });
     if (!response.ok) {
       throw await readError(response, fallback);
     }
@@ -88,15 +105,66 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
       return base.length > 0;
     },
 
-    async load(): Promise<UserStatePayload | null> {
-      // 还没加入任何空间 = 纯本机使用，不产生任何网络请求
-      const identity = loadIdentity();
-      if (!identity) {
-        return null;
-      }
+    async register(input: RegisterInput): Promise<AuthResult> {
+      return requestJson<AuthResult>(
+        '/api/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            username: input.username,
+            password: input.password,
+            displayName: input.displayName,
+          }),
+        },
+        '注册失败',
+      );
+    },
+
+    async login(input: LoginInput): Promise<AuthResult> {
+      return requestJson<AuthResult>(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          body: JSON.stringify({ username: input.username, password: input.password }),
+        },
+        '登录失败',
+      );
+    },
+
+    async logout(token: string): Promise<void> {
+      await requestJson<{ ok: boolean }>(
+        '/api/auth/logout',
+        { method: 'POST' },
+        '退出登录失败',
+        token,
+      );
+    },
+
+    async me(token: string) {
+      return requestJson<{ account: AuthResult['account']; membership: AuthResult['membership'] }>(
+        '/api/me',
+        { method: 'GET' },
+        '读取账号信息失败',
+        token,
+      );
+    },
+
+    async changePassword(token: string, oldPassword: string, newPassword: string): Promise<void> {
+      await requestJson<{ ok: boolean }>(
+        '/api/auth/password',
+        {
+          method: 'POST',
+          body: JSON.stringify({ oldPassword, newPassword }),
+        },
+        '修改密码失败',
+        token,
+      );
+    },
+
+    async load(token: string): Promise<UserStatePayload | null> {
       const response = await fetchWithTimeout(`${base}/api/state`, {
         method: 'GET',
-        headers: { [USER_KEY_HEADER]: identity.memberId },
+        headers: { [TOKEN_HEADER]: token },
       });
       if (response.status === 404) {
         return null;
@@ -111,21 +179,15 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
       return { ...data, version: data.version ?? STATE_VERSION };
     },
 
-    async save(payload: UserStatePayload): Promise<void> {
-      const identity = loadIdentity();
-      if (!identity) {
-        // 未加入空间：数据只留在本机
-        return;
-      }
+    async save(token: string, payload: UserStatePayload): Promise<void> {
       const response = await fetchWithTimeout(`${base}/api/state`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          [USER_KEY_HEADER]: identity.memberId,
+          [TOKEN_HEADER]: token,
         },
         body: JSON.stringify({
           version: STATE_VERSION,
-          userKey: identity.memberId,
           state: payload.state,
           updatedAt: payload.updatedAt,
         }),
@@ -144,80 +206,69 @@ export function createWorkerBackend(baseUrl: string): BackendProvider {
       }
     },
 
-    async createSpace(input: SpaceCreateInput): Promise<SpaceCreateResult> {
-      return requestJson<SpaceCreateResult>(
-        '/api/space/create',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        },
+    async createClass(token: string, name: string): Promise<ClassCreateResult> {
+      return requestJson<ClassCreateResult>(
+        '/api/class/create',
+        { method: 'POST', body: JSON.stringify({ name }) },
         '创建班级失败',
+        token,
       );
     },
 
-    async joinSpace(input: SpaceJoinInput): Promise<SpaceJoinResult> {
-      return requestJson<SpaceJoinResult>(
+    async joinClass(token: string, joinCode: string): Promise<ClassJoinResult> {
+      return requestJson<ClassJoinResult>(
         '/api/member/join',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        },
+        { method: 'POST', body: JSON.stringify({ joinCode }) },
         '加入班级失败',
+        token,
       );
     },
 
-    async recoverMember(input: MemberRecoverInput): Promise<MemberRecoverResult> {
-      return requestJson<MemberRecoverResult>(
-        '/api/member/recover',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        },
-        '恢复进度失败',
-      );
-    },
-
-    async classOverview(ownerKey: string): Promise<ClassOverview> {
+    async classOverview(token: string): Promise<ClassOverview> {
       return requestJson<ClassOverview>(
         '/api/class/overview',
-        {
-          method: 'GET',
-          headers: { [OWNER_KEY_HEADER]: ownerKey },
-        },
+        { method: 'GET' },
         '读取班级看板失败',
+        token,
       );
     },
 
-    async revokeMember(ownerKey: string, memberId: string): Promise<void> {
+    async removeMember(token: string, accountId: string): Promise<void> {
       await requestJson<{ ok: boolean }>(
-        '/api/member/revoke',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            [OWNER_KEY_HEADER]: ownerKey,
-          },
-          body: JSON.stringify({ memberId }),
-        },
+        '/api/member/remove',
+        { method: 'POST', body: JSON.stringify({ accountId }) },
         '移出成员失败',
+        token,
       );
     },
 
-    async revokeSpace(ownerKey: string): Promise<void> {
-      await requestJson<{ ok: boolean }>(
-        '/api/space/revoke',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            [OWNER_KEY_HEADER]: ownerKey,
-          },
-        },
-        '撤销班级失败',
+    async resetMemberPassword(token: string, accountId: string): Promise<string> {
+      const data = await requestJson<{ ok: boolean; tempPassword: string }>(
+        '/api/member/reset-password',
+        { method: 'POST', body: JSON.stringify({ accountId }) },
+        '重置密码失败',
+        token,
       );
+      return data.tempPassword;
+    },
+
+    async revokeClass(token: string): Promise<void> {
+      await requestJson<{ ok: boolean }>(
+        '/api/class/revoke',
+        { method: 'POST', body: JSON.stringify({}) },
+        '撤销班级失败',
+        token,
+      );
+    },
+
+    async leaveClass(token: string): Promise<ClassLeaveResult> {
+      const data = await requestJson<ClassLeaveResult>(
+        '/api/class/leave',
+        { method: 'POST', body: JSON.stringify({}) },
+        '退出班级失败',
+        token,
+      );
+      return data;
     },
   };
 }

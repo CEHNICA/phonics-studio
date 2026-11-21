@@ -1,46 +1,67 @@
--- Cloudflare D1 数据表（执行：npx wrangler d1 execute phonics-studio --file=./schema.sql）
+-- 48 音标小铺 · 账号体系数据表（D1）
 --
--- 旧表（deprecated，兼容期保留）：
---   phonics_user_state 是「同步码即账号」时代的老结构，主键就是同步码本身。
---   兼容期内 /api/state 仍兼容这条老路径，新前端一律走成员通道。
---   移除条件：旧表连续 30 天无写入。
-CREATE TABLE IF NOT EXISTS phonics_user_state (
-  user_key TEXT PRIMARY KEY,
-  state TEXT NOT NULL DEFAULT '{}',
-  updated_at TEXT NOT NULL
+-- 账号：username + password（PBKDF2-SHA256，salt 每账号独立）
+-- 会话：服务端只存令牌哈希，明文令牌只回给客户端一次
+-- 班级：一个班级一行；成员按账号分行，成员之间互不可见
+--
+-- 旧表 phonics_user_state（上一版同步码机制）保留一个兼容期，
+-- 移除条件：该表连续 30 天无写入。
+
+DROP TABLE IF EXISTS phonics_member_state;
+DROP TABLE IF EXISTS phonics_members;
+DROP TABLE IF EXISTS phonics_sessions;
+DROP TABLE IF EXISTS phonics_spaces;
+DROP TABLE IF EXISTS phonics_accounts;
+
+CREATE TABLE IF NOT EXISTS phonics_accounts (
+  account_id     TEXT PRIMARY KEY,
+  username       TEXT NOT NULL UNIQUE,
+  password_hash  TEXT NOT NULL,
+  salt           TEXT NOT NULL,
+  display_name   TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL
 );
 
--- 空间：班级或个人空间
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username ON phonics_accounts(username);
+
+CREATE TABLE IF NOT EXISTS phonics_sessions (
+  token_hash  TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_account ON phonics_sessions(account_id);
+
 CREATE TABLE IF NOT EXISTS phonics_spaces (
-  space_id   TEXT PRIMARY KEY,
-  kind       TEXT NOT NULL DEFAULT 'class',
-  join_code  TEXT NOT NULL,
-  name       TEXT NOT NULL DEFAULT '',
-  owner_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  revoked_at TEXT
+  space_id         TEXT PRIMARY KEY,
+  kind             TEXT NOT NULL DEFAULT 'class',
+  join_code        TEXT,
+  name             TEXT NOT NULL,
+  owner_account_id TEXT,
+  created_at       TEXT NOT NULL,
+  revoked_at       TEXT
 );
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_spaces_join ON phonics_spaces(join_code);
+CREATE INDEX IF NOT EXISTS idx_spaces_owner ON phonics_spaces(owner_account_id);
 
--- 成员：一个成员 = 一个学生（或班级所有者）
 CREATE TABLE IF NOT EXISTS phonics_members (
-  member_id     TEXT PRIMARY KEY,
-  space_id      TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'student',
-  recovery_hash TEXT NOT NULL,
-  device_hash   TEXT NOT NULL DEFAULT '',
-  name          TEXT NOT NULL DEFAULT '',
-  stats_json    TEXT NOT NULL DEFAULT '{}',
-  created_at    TEXT NOT NULL,
-  last_seen_at  TEXT,
-  revoked_at    TEXT
+  account_id   TEXT PRIMARY KEY,
+  space_id     TEXT NOT NULL,
+  role         TEXT NOT NULL,
+  name         TEXT NOT NULL DEFAULT '',
+  stats_json   TEXT NOT NULL DEFAULT '{}',
+  created_at   TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at   TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_members_space ON phonics_members(space_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_members_recovery ON phonics_members(recovery_hash);
 
--- 成员状态：一成员一行（与旧表结构一致）
+CREATE INDEX IF NOT EXISTS idx_members_space ON phonics_members(space_id);
+
 CREATE TABLE IF NOT EXISTS phonics_member_state (
-  member_id  TEXT PRIMARY KEY,
-  state      TEXT NOT NULL DEFAULT '{}',
-  updated_at TEXT NOT NULL
+  account_id  TEXT NOT NULL,
+  space_id    TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (account_id, space_id)
 );

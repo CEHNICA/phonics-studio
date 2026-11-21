@@ -8,7 +8,6 @@ import { TopHeader } from './components/TopHeader';
 import { UserDataPanel } from './components/UserDataPanel';
 import { CONFUSABLE_PAIRS, PHONEMES } from './data/phonics-catalog';
 import { usePhonicsProgress } from './hooks/usePhonicsProgress';
-import { detectCodeKind } from './services/backend/space-client';
 import type { AppTab, StudyDayPlan } from './types/phonics';
 
 /**
@@ -21,7 +20,7 @@ export function App() {
   const [dayFilterLabel, setDayFilterLabel] = useState<string | null>(null);
   const [initialPairId, setInitialPairId] = useState<string | undefined>(undefined);
   const [userDataOpen, setUserDataOpen] = useState<boolean>(false);
-  const [dashboardOwnerKey, setDashboardOwnerKey] = useState<string | null>(null);
+  const [dashboardOpen, setDashboardOpen] = useState<boolean>(false);
 
   const {
     progress,
@@ -29,9 +28,10 @@ export function App() {
     backendState,
     lastSyncedAt,
     favoriteIds,
-    identity,
-    identityError,
-    identityBusy,
+    session,
+    membership,
+    authError,
+    authBusy,
     getPhonemeProgress,
     setRepresentativeWord,
     toggleCompleted,
@@ -40,26 +40,14 @@ export function App() {
     isFavorite,
     resetAllProgress,
     syncNow,
+    register,
+    login,
+    logout,
+    changePassword,
     joinClass,
-    recoverProgress,
     createClass,
-    createPersonalSpace,
-    leaveSpace,
+    leaveClass,
   } = usePhonicsProgress();
-
-  /**
-   * 面板里那一个码输入框：按前缀分流（班级码 → 加入，PH- → 恢复，OW- → 看板）
-   */
-  const handleSubmitCode = useCallback(
-    (code: string) => {
-      if (detectCodeKind(code) === 'recovery') {
-        void recoverProgress(code);
-        return;
-      }
-      void joinClass(code);
-    },
-    [joinClass, recoverProgress],
-  );
 
   const handleOpenInStudio = useCallback((phonemeId: string) => {
     setDayFilterIds(null);
@@ -170,31 +158,45 @@ export function App() {
         attempts={progress.attempts}
         backendState={backendState}
         lastSyncedAt={lastSyncedAt}
-        identity={identity}
-        identityError={identityError}
-        identityBusy={identityBusy}
+        session={session}
+        membership={membership}
+        authError={authError}
+        authBusy={authBusy}
         onSelectPhoneme={handleOpenInStudio}
         onSyncNow={() => {
           void syncNow();
         }}
-        onSubmitCode={handleSubmitCode}
+        onRegister={(username, password, displayName) => {
+          void register(username, password, displayName);
+        }}
+        onLogin={(username, password) => {
+          void login(username, password);
+        }}
+        onLogout={() => {
+          void logout();
+        }}
+        onChangePassword={(oldPassword, newPassword) => {
+          void changePassword(oldPassword, newPassword);
+        }}
+        onJoinClass={(code) => {
+          void joinClass(code);
+        }}
         onCreateClass={(name) => {
           void createClass(name);
         }}
-        onCreatePersonal={() => {
-          void createPersonalSpace();
+        onLeaveClass={() => {
+          void leaveClass();
         }}
-        onOpenDashboard={(ownerKey) => {
-          setDashboardOwnerKey(ownerKey);
+        onOpenDashboard={() => {
+          setDashboardOpen(true);
           setUserDataOpen(false);
         }}
-        onLeaveSpace={leaveSpace}
       />
 
       <ClassDashboard
-        open={Boolean(dashboardOwnerKey)}
-        ownerKey={dashboardOwnerKey ?? ''}
-        onClose={() => setDashboardOwnerKey(null)}
+        open={dashboardOpen && Boolean(session?.token)}
+        token={session?.token ?? ''}
+        onClose={() => setDashboardOpen(false)}
       />
     </div>
   );

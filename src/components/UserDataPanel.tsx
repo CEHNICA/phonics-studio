@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CloudOff, Copy, RefreshCw, Star, X } from 'lucide-react';
+import { CloudOff, Copy, LogOut, RefreshCw, Star, UserPlus, X } from 'lucide-react';
 import { PHONEME_MAP } from '../data/phonics-catalog';
-import type { BackendState } from '../services/backend/types';
-import { detectCodeKind, formatJoinCode } from '../services/backend/space-client';
-import type { SpaceIdentity } from '../services/backend/space-client';
+import type { BackendState, Membership } from '../services/backend/types';
+import type { AccountSession } from '../services/backend/account-session';
+import { formatJoinCode } from '../services/backend/account-client';
 import type { QuizAttempt } from '../types/phonics';
 
 interface UserDataPanelProps {
@@ -13,18 +13,22 @@ interface UserDataPanelProps {
   attempts: QuizAttempt[];
   backendState: BackendState;
   lastSyncedAt: string | null;
-  identity: SpaceIdentity | null;
-  identityError: string | null;
-  identityBusy: boolean;
+  /** 当前会话；null = 未登录 */
+  session: AccountSession | null;
+  /** 当前账号的班级状态 */
+  membership: Membership | null;
+  authError: string | null;
+  authBusy: boolean;
   onSelectPhoneme: (phonemeId: string) => void;
   onSyncNow: () => void;
-  /** 面板里那个唯一的码输入框：按前缀自动分流（加入 / 恢复 / 看板） */
-  onSubmitCode: (code: string) => void;
+  onRegister: (username: string, password: string, displayName: string) => void;
+  onLogin: (username: string, password: string) => void;
+  onLogout: () => void;
+  onChangePassword: (oldPassword: string, newPassword: string) => void;
+  onJoinClass: (code: string) => void;
   onCreateClass: (name: string) => void;
-  onCreatePersonal: () => void;
-  onOpenDashboard: (ownerKey: string) => void;
-  /** 退出当前空间，回到仅本机模式（云端数据保留） */
-  onLeaveSpace: () => void;
+  onLeaveClass: () => void;
+  onOpenDashboard: () => void;
 }
 
 const STATE_TEXT: Record<BackendState, string> = {
@@ -49,10 +53,12 @@ function formatAttemptTime(iso: string): string {
 }
 
 /**
- * 我的数据面板：收藏夹 + 最近答题记录 + 云同步 / 班级身份
+ * 我的数据面板：收藏夹 + 最近答题记录 + 账号
  *
- * 身份区只有「一个输入框 + 一个主按钮」：粘贴班级码加入班级，粘贴恢复密钥恢复进度，
- * 粘贴管理码打开班级看板——按前缀自动分流，不额外堆输入框。
+ * 账号区只有「用户名 + 密码」两样东西：
+ * - 没登录：一个表单，登录 / 注册切换；
+ * - 登录了：显示账号名和班级状态，老师多一个「班级码」和一个「打开看板」；
+ * - 旧的恢复码、管理码、设备密钥全部删除，没有第二个入口。
  */
 export function UserDataPanel({
   open,
@@ -61,21 +67,32 @@ export function UserDataPanel({
   attempts,
   backendState,
   lastSyncedAt,
-  identity,
-  identityError,
-  identityBusy,
+  session,
+  membership,
+  authError,
+  authBusy,
   onSelectPhoneme,
   onSyncNow,
-  onSubmitCode,
+  onRegister,
+  onLogin,
+  onLogout,
+  onChangePassword,
+  onJoinClass,
   onCreateClass,
-  onCreatePersonal,
+  onLeaveClass,
   onOpenDashboard,
-  onLeaveSpace,
 }: UserDataPanelProps) {
-  const [codeInput, setCodeInput] = useState<string>('');
-  const [viewCode, setViewCode] = useState<{ title: string; value: string } | null>(null);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [displayName, setDisplayName] = useState<string>('');
+  const [joinCodeInput, setJoinCodeInput] = useState<string>('');
   const [className, setClassName] = useState<string>('');
   const [creatingClass, setCreatingClass] = useState<boolean>(false);
+  const [changingPassword, setChangingPassword] = useState<boolean>(false);
+  const [oldPassword, setOldPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [copied, setCopied] = useState<boolean>(false);
 
   const favorites = useMemo(
     () =>
@@ -92,44 +109,63 @@ export function UserDataPanel({
     return null;
   }
 
-  const codeKind = detectCodeKind(codeInput);
-  const actionLabel =
-    codeKind === 'recovery'
-      ? '恢复进度'
-      : codeKind === 'owner'
-        ? '打开看板'
-        : codeInput.trim()
-          ? '加入班级'
-          : '请输入码';
+  const isOwner = membership?.role === 'owner' && !membership?.revoked;
+  /** 被移出 / 班级被撤销时视为「不在班里」，可以重新输班级码 */
+  const inClass = Boolean(membership && !membership.revoked && !membership.spaceRevoked);
+  const classNotice = membership?.spaceRevoked
+    ? '这个班级已被老师撤销了'
+    : membership?.revoked
+      ? '你已被移出这个班级，可以换一个班级码重新加入'
+      : null;
 
-  const handleSubmitCode = () => {
-    const value = codeInput.trim();
+  const handleAuthSubmit = () => {
+    if (!username.trim() || !password) {
+      return;
+    }
+    if (mode === 'register') {
+      onRegister(username, password, displayName);
+    } else {
+      onLogin(username, password);
+    }
+  };
+
+  const handleCopyJoinCode = async () => {
+    if (!membership?.joinCode) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(membership.joinCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 剪贴板不可用时，用户可以直接选中下面的班级码文本复制
+    }
+  };
+
+  const handleJoinClass = () => {
+    const value = joinCodeInput.trim();
     if (!value) {
       return;
     }
-    if (detectCodeKind(value) === 'owner') {
-      onOpenDashboard(value.toUpperCase());
-      return;
-    }
-    onSubmitCode(value);
-  };
-
-  const handleCopy = async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      // 剪贴板不可用时，用户可以直接选中只读框里的文字复制
-    }
+    onJoinClass(value);
+    setJoinCodeInput('');
   };
 
   const handleCreateClass = () => {
-    const name = className.trim() || '我的班级';
-    onCreateClass(name);
+    onCreateClass(className.trim() || '我的班级');
     setCreatingClass(false);
     setClassName('');
   };
 
-  const isOwner = identity?.role === 'owner';
+  const handleChangePassword = () => {
+    if (!oldPassword || !newPassword) {
+      return;
+    }
+    onChangePassword(oldPassword, newPassword);
+    setChangingPassword(false);
+    setOldPassword('');
+    setNewPassword('');
+  };
 
   return (
     <>
@@ -202,188 +238,222 @@ export function UserDataPanel({
             ) : (
               <RefreshCw size={14} />
             )}
-            <span>云同步</span>
+            <span>账号</span>
           </div>
 
-          <p className="user-data-sync-state">
-            {identity
-              ? `已加入「${identity.spaceName || '未命名班级'}」 · ${STATE_TEXT[backendState]}`
-              : '仅保存在本机 — 尚未加入班级'}
-          </p>
-          {lastSyncedAt && identity && (
-            <p className="user-data-sync-time">最近同步：{formatAttemptTime(lastSyncedAt)}</p>
-          )}
-
-          {isOwner && identity?.ownerKey && (
+          {session ? (
             <>
-              <button
-                type="button"
-                className="user-data-primary-btn user-data-primary-btn-block"
-                onClick={() => onOpenDashboard(identity.ownerKey as string)}
-              >
-                打开班级看板
-              </button>
-              <div className="user-data-divider" />
-            </>
-          )}
+              <p className="user-data-sync-state">
+                {session.account.displayName}（{session.account.username}）
+              </p>
+              <p className="user-data-sync-time">
+                {inClass
+                  ? `已加入「${membership?.spaceName}」 · ${STATE_TEXT[backendState]}`
+                  : `还没进班级 · ${STATE_TEXT[backendState]}`}
+              </p>
+              {classNotice && <p className="user-data-code-error">{classNotice}</p>}
+              {lastSyncedAt && (
+                <p className="user-data-sync-time">最近同步：{formatAttemptTime(lastSyncedAt)}</p>
+              )}
 
-          <label className="user-data-code-label" htmlFor="sync-code-input">
-            粘贴班级码 / 恢复码 / 管理码，按前缀自动分流
-          </label>
-          <div className="user-data-code-row">
-            <input
-              id="sync-code-input"
-              type="text"
-              className="user-data-code-input"
-              placeholder="班级码 / 恢复码 / 管理码"
-              value={codeInput}
-              onChange={(event) => setCodeInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleSubmitCode();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="user-data-code-btn"
-              disabled={identityBusy || !codeInput.trim()}
-              onClick={handleSubmitCode}
-            >
-              {identityBusy ? '处理中…' : actionLabel}
-            </button>
-          </div>
-
-          {identityError && <p className="user-data-code-error">{identityError}</p>}
-
-          <div className="user-data-action-row">
-            {identity && (
-              <button type="button" className="user-data-sync-btn" onClick={onSyncNow}>
-                立即同步
-              </button>
-            )}
-            {!identity && (
-              <button
-                type="button"
-                className="user-data-ghost-btn"
-                disabled={identityBusy}
-                onClick={onCreatePersonal}
-              >
-                创建我的恢复码
-              </button>
-            )}
-            <button
-              type="button"
-              className="user-data-ghost-btn"
-              disabled={identityBusy}
-              onClick={() => setCreatingClass(true)}
-            >
-              创建班级
-            </button>
-          </div>
-
-          {identity && (
-            <>
-              <div className="user-data-divider" />
-
-              <div className="user-data-code-list">
-                {isOwner && identity.joinCode && (
-                  <div className="user-data-code-row-item">
-                    <span className="user-data-code-name">班级码</span>
-                    <button
-                      type="button"
-                      className="user-data-link-btn"
-                      onClick={() =>
-                        setViewCode({
-                          title: '班级码（发给学生，他们输入即可加入）',
-                          value: formatJoinCode(identity.joinCode as string),
-                        })
-                      }
-                    >
-                      查看
-                    </button>
-                  </div>
-                )}
-                <div className="user-data-code-row-item">
-                  <span className="user-data-code-name">我的恢复码</span>
+              {isOwner && membership?.joinCode && (
+                <div className="user-data-joincode">
+                  <span className="user-data-code-name">班级码</span>
+                  <strong className="user-data-joincode-value">
+                    {formatJoinCode(membership.joinCode)}
+                  </strong>
                   <button
                     type="button"
                     className="user-data-link-btn"
-                    onClick={() =>
-                      setViewCode({ title: '我的恢复码（换设备时用）', value: identity.recoveryKey })
-                    }
+                    onClick={() => void handleCopyJoinCode()}
                   >
-                    查看
+                    <Copy size={13} />
+                    {copied ? '已复制' : '复制'}
                   </button>
                 </div>
-                {isOwner && identity.ownerKey && (
-                  <div className="user-data-code-row-item">
-                    <span className="user-data-code-name">管理码</span>
+              )}
+
+              {!inClass && (
+                <>
+                  <label className="user-data-code-label" htmlFor="join-code-input">
+                    输入班级码加入
+                  </label>
+                  <div className="user-data-code-row">
+                    <input
+                      id="join-code-input"
+                      type="text"
+                      className="user-data-code-input"
+                      placeholder="班级码"
+                      value={joinCodeInput}
+                      onChange={(event) => setJoinCodeInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          handleJoinClass();
+                        }
+                      }}
+                    />
                     <button
                       type="button"
-                      className="user-data-link-btn"
-                      onClick={() =>
-                        setViewCode({
-                          title: '管理码（只有你能看班级看板）',
-                          value: identity.ownerKey as string,
-                        })
-                      }
+                      className="user-data-code-btn"
+                      disabled={authBusy || !joinCodeInput.trim()}
+                      onClick={handleJoinClass}
                     >
-                      查看
+                      {authBusy ? '处理中…' : '加入'}
                     </button>
                   </div>
+                </>
+              )}
+
+              {authError && <p className="user-data-code-error">{authError}</p>}
+
+              <div className="user-data-action-row">
+                {!inClass && (
+                  <button
+                    type="button"
+                    className="user-data-ghost-btn"
+                    disabled={authBusy}
+                    onClick={() => setCreatingClass(true)}
+                  >
+                    <UserPlus size={14} />
+                    创建班级
+                  </button>
+                )}
+                {isOwner && (
+                  <button
+                    type="button"
+                    className="user-data-primary-btn"
+                    onClick={onOpenDashboard}
+                  >
+                    打开班级看板
+                  </button>
+                )}
+                {inClass && (
+                  <button
+                    type="button"
+                    className="user-data-sync-btn"
+                    disabled={authBusy}
+                    onClick={onSyncNow}
+                  >
+                    立即同步
+                  </button>
                 )}
               </div>
-            </>
-          )}
 
-          {identity && (
-            <button
-              type="button"
-              className="user-data-text-btn"
-              onClick={() => {
-                if (window.confirm('退出后回到「仅保存在本机」，云端数据会保留，需要时可再用恢复密钥找回。')) {
-                  onLeaveSpace();
-                }
-              }}
-            >
-              退出这个空间
-            </button>
+              {inClass && (
+                <button
+                  type="button"
+                  className="user-data-text-btn"
+                  disabled={authBusy}
+                  onClick={onLeaveClass}
+                >
+                  {isOwner ? '撤销并退出这个班级' : '退出这个班级'}
+                </button>
+              )}
+
+              <div className="user-data-divider" />
+
+              <div className="user-data-action-row">
+                <button
+                  type="button"
+                  className="user-data-ghost-btn"
+                  onClick={() => setChangingPassword(true)}
+                >
+                  修改密码
+                </button>
+                <button
+                  type="button"
+                  className="user-data-ghost-btn"
+                  disabled={authBusy}
+                  onClick={onLogout}
+                >
+                  <LogOut size={14} />
+                  退出登录
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="user-data-sync-state">
+                没登录 — 进度只保存在本机，登录后才会同步到云端
+              </p>
+
+              <div className="user-data-tabs" role="tablist" aria-label="登录或注册">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'login'}
+                  className={mode === 'login' ? 'is-active' : ''}
+                  onClick={() => setMode('login')}
+                >
+                  登录
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'register'}
+                  className={mode === 'register' ? 'is-active' : ''}
+                  onClick={() => setMode('register')}
+                >
+                  注册
+                </button>
+              </div>
+
+              <div className="user-data-field">
+                <label htmlFor="account-username">用户名</label>
+                <input
+                  id="account-username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="字母或数字，2–20 位"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </div>
+
+              {mode === 'register' && (
+                <div className="user-data-field">
+                  <label htmlFor="account-display-name">姓名（可不填）</label>
+                  <input
+                    id="account-display-name"
+                    type="text"
+                    placeholder="同学怎么称呼你"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="user-data-field">
+                <label htmlFor="account-password">密码</label>
+                <input
+                  id="account-password"
+                  type="password"
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  placeholder="至少 6 位"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      handleAuthSubmit();
+                    }
+                  }}
+                />
+              </div>
+
+              {authError && <p className="user-data-code-error">{authError}</p>}
+
+              <button
+                type="button"
+                className="user-data-primary-btn user-data-primary-btn-block"
+                disabled={authBusy || !username.trim() || !password}
+                onClick={handleAuthSubmit}
+              >
+                {authBusy ? '处理中…' : mode === 'register' ? '注册并登录' : '登录'}
+              </button>
+            </>
           )}
         </section>
       </aside>
-
-      {viewCode && (
-        <div className="user-data-modal-backdrop" onClick={() => setViewCode(null)}>
-          <div className="user-data-modal" onClick={(event) => event.stopPropagation()}>
-            <h4>{viewCode.title}</h4>
-            <input
-              className="user-data-code-input"
-              readOnly
-              value={viewCode.value}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <p className="user-data-modal-tip">请自己收好，丢了只能重新建班级。</p>
-            <div className="user-data-modal-actions">
-              <button
-                type="button"
-                className="user-data-ghost-btn"
-                onClick={() => void handleCopy(viewCode.value)}
-              >
-                <Copy size={14} />
-                复制
-              </button>
-              <button
-                type="button"
-                className="user-data-primary-btn"
-                onClick={() => setViewCode(null)}
-              >
-                知道了
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {creatingClass && (
         <div className="user-data-modal-backdrop" onClick={() => setCreatingClass(false)}>
@@ -401,7 +471,7 @@ export function UserDataPanel({
                 }
               }}
             />
-            <p className="user-data-modal-tip">创建后会拿到班级码（发给学生）和管理码（你自己留着）。</p>
+            <p className="user-data-modal-tip">创建后会拿到一个班级码，把它发给学生就能加入。</p>
             <div className="user-data-modal-actions">
               <button
                 type="button"
@@ -412,6 +482,47 @@ export function UserDataPanel({
               </button>
               <button type="button" className="user-data-primary-btn" onClick={handleCreateClass}>
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {changingPassword && (
+        <div className="user-data-modal-backdrop" onClick={() => setChangingPassword(false)}>
+          <div className="user-data-modal" onClick={(event) => event.stopPropagation()}>
+            <h4>修改密码</h4>
+            <input
+              className="user-data-code-input"
+              type="password"
+              autoFocus
+              placeholder="原密码"
+              value={oldPassword}
+              onChange={(event) => setOldPassword(event.target.value)}
+            />
+            <input
+              className="user-data-code-input"
+              type="password"
+              placeholder="新密码（至少 6 位）"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleChangePassword();
+                }
+              }}
+            />
+            <p className="user-data-modal-tip">忘了密码？让班里的老师在看板上重置。</p>
+            <div className="user-data-modal-actions">
+              <button
+                type="button"
+                className="user-data-ghost-btn"
+                onClick={() => setChangingPassword(false)}
+              >
+                取消
+              </button>
+              <button type="button" className="user-data-primary-btn" onClick={handleChangePassword}>
+                保存
               </button>
             </div>
           </div>

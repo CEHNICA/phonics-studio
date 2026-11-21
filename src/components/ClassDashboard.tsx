@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GraduationCap, RefreshCw, UserMinus, X } from 'lucide-react';
+import { GraduationCap, KeyRound, RefreshCw, UserMinus, X } from 'lucide-react';
 import { getBackend } from '../services/backend';
 import type { ClassOverview } from '../services/backend/types';
 
 interface ClassDashboardProps {
   open: boolean;
-  /** 管理码：老师凭它看全班 */
-  ownerKey: string;
+  /** 会话令牌：老师凭它看全班 */
+  token: string;
   onClose: () => void;
 }
 
@@ -44,22 +44,21 @@ function isToday(iso: string | null): boolean {
 }
 
 /**
- * 班级看板：老师凭管理码查看全班每人的已学音标数、打卡天数、答题正确率与最近活跃
+ * 班级看板：老师凭自己的登录状态查看全班每人的已学音标数、打卡天数、答题正确率与最近活跃
+ *
+ * 统计只看学生：老师自己不在班级里答题，计进分母会把平均分拉低。
  */
-export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps) {
+export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
   const [overview, setOverview] = useState<ClassOverview | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  const [tempPassword, setTempPassword] = useState<{ name: string; password: string } | null>(null);
 
   const load = useCallback(async () => {
     const backend = getBackend();
-    if (!backend.classOverview) {
-      setError('当前后端不支持班级看板');
-      return;
-    }
     try {
-      const data = await backend.classOverview(ownerKey);
+      const data = await backend.classOverview(token);
       setOverview(data);
       setError(null);
     } catch (err) {
@@ -67,16 +66,16 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
     } finally {
       setRefreshing(false);
     }
-  }, [ownerKey]);
+  }, [token]);
 
   useEffect(() => {
-    if (!open || !ownerKey) {
+    if (!open || !token) {
       return;
     }
     (async () => {
       await load();
     })();
-  }, [open, ownerKey, load]);
+  }, [open, token, load]);
 
   /** 首次打开时还没有数据 = 正在加载 */
   const loading = refreshing || (open && !overview && !error);
@@ -97,17 +96,14 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
     return { count, avgCompleted, avgAccuracy, activeToday };
   }, [overview]);
 
-  const handleRevoke = async (memberId: string, name: string) => {
+  const handleRevoke = async (accountId: string, name: string) => {
     const backend = getBackend();
-    if (!backend.revokeMember) {
-      return;
-    }
     if (!window.confirm(`确定把「${name}」移出班级吗？他的云端数据会立刻停止同步。`)) {
       return;
     }
-    setBusyMemberId(memberId);
+    setBusyMemberId(accountId);
     try {
-      await backend.revokeMember(ownerKey, memberId);
+      await backend.removeMember(token, accountId);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : '移出成员失败');
@@ -116,17 +112,31 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
     }
   };
 
-  const handleRevokeSpace = async () => {
+  const handleResetPassword = async (accountId: string, name: string) => {
     const backend = getBackend();
-    if (!backend.revokeSpace) {
+    if (!window.confirm(`确定重置「${name}」的密码吗？重置后他需要用新密码重新登录。`)) {
       return;
     }
+    setBusyMemberId(accountId);
+    try {
+      const password = await backend.resetMemberPassword(token, accountId);
+      setTempPassword({ name, password });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重置密码失败');
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
+  const handleRevokeSpace = async () => {
+    const backend = getBackend();
     if (!window.confirm('确定撤销整个班级吗？撤销后所有成员都无法再同步，操作不可撤销。')) {
       return;
     }
     setBusyMemberId('__space__');
     try {
-      await backend.revokeSpace(ownerKey);
+      await backend.revokeClass(token);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '撤销班级失败');
@@ -218,7 +228,7 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                   )}
                   {overview.members.map((member) => (
                     <tr
-                      key={member.memberId}
+                      key={member.accountId}
                       className={
                         member.revoked
                           ? 'class-member-revoked'
@@ -247,15 +257,26 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                       <td>{formatTime(member.lastSeenAt)}</td>
                       <td className="class-col-action">
                         {member.role !== 'owner' && !member.revoked && (
-                          <button
-                            type="button"
-                            className="class-member-revoke-btn"
-                            disabled={busyMemberId === member.memberId}
-                            onClick={() => void handleRevoke(member.memberId, member.name)}
-                          >
-                            <UserMinus size={13} />
-                            移出
-                          </button>
+                          <span className="class-member-actions">
+                            <button
+                              type="button"
+                              className="class-member-reset-btn"
+                              disabled={busyMemberId === member.accountId}
+                              onClick={() => void handleResetPassword(member.accountId, member.name)}
+                            >
+                              <KeyRound size={13} />
+                              重置密码
+                            </button>
+                            <button
+                              type="button"
+                              className="class-member-revoke-btn"
+                              disabled={busyMemberId === member.accountId}
+                              onClick={() => void handleRevoke(member.accountId, member.name)}
+                            >
+                              <UserMinus size={13} />
+                              移出
+                            </button>
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -265,7 +286,7 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
             </div>
 
             <footer className="class-dashboard-footer">
-              <span>管理码只在本机保存，看板数据实时读取，不影响任何人的学习进度。</span>
+              <span>看板数据实时读取，不影响任何人的学习进度。</span>
               <button
                 type="button"
                 className="class-dashboard-revoke-space"
@@ -278,6 +299,25 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
           </>
         )}
       </section>
+
+      {tempPassword && (
+        <div className="user-data-modal-backdrop" onClick={() => setTempPassword(null)}>
+          <div className="user-data-modal" onClick={(event) => event.stopPropagation()}>
+            <h4>「{tempPassword.name}」的新密码</h4>
+            <input className="user-data-code-input" readOnly value={tempPassword.password} />
+            <p className="user-data-modal-tip">把新密码告诉本人，让他用新密码登录。</p>
+            <div className="user-data-modal-actions">
+              <button
+                type="button"
+                className="user-data-ghost-btn"
+                onClick={() => setTempPassword(null)}
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

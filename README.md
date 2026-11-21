@@ -2,7 +2,7 @@
 
 面向初一学生的 **48 个国际音标** 互动伴学网页。看图辨音、听音辨形、跟读打分、易混音标对比、14 天闯关计划，一个页面全包。
 
-技术栈：**React 19 + TypeScript + Vite 8 + Oxlint**，默认**纯前端、无后端依赖**，学习进度存在浏览器 localStorage 里；可选接入 Cloudflare Workers / Supabase 做多设备云同步。
+技术栈：**React 19 + TypeScript + Vite 8 + Oxlint**，默认**纯前端、无后端依赖**，学习进度存在浏览器 localStorage 里；接入 Cloudflare Pages Functions + D1 后可用「用户名 + 密码」账号体系跨设备同步、按班级码组班、老师看全班看板。
 
 线上体验：<https://5p3wt4cgcivtd.space.mcode.cn>
 
@@ -15,7 +15,7 @@
 | 易混音标对 | 专治 `/ɪ/` vs `/iː/`、`/θ/` vs `/s/` 这类易混组合，横向对比 |
 | 听力测验 | 听音选音标，自动挑出你的薄弱项并跳转复习 |
 | 跟读打分 | 浏览器录音 → 提取声学特征 → 与离线模板比对，给出发音相似度 |
-| 我的数据 | 收藏夹（可筛选）、答题记录回顾、云同步与同步码设置 |
+| 我的数据 | 收藏夹（可筛选）、答题记录回顾、账号登录/注册、班级码加入、老师看板 |
 
 ## 快速开始
 
@@ -26,7 +26,9 @@ npm run build     # 生产构建，产物在 dist/
 npm run preview   # 预览生产构建
 npm run lint      # Oxlint 检查
 npm test          # 「待巩固」规则回归测试（纯 Node，无需浏览器）
-node scripts/test-backend-sync.ts   # 云同步合并规则回归测试（纯 Node）
+node scripts/test-backend-sync.ts     # 云同步合并规则回归测试（纯 Node）
+node scripts/test-account-auth.ts     # 账号 / 密码 / 令牌 / 班级码纯函数体检（纯 Node）
+node scripts/test-account-session.ts  # 会话持久化体检（纯 Node）
 ```
 
 Windows 用户也可以直接双击 **`start-study.bat`**：它会拉起本地静态服务并打开 <http://localhost:4173>。
@@ -45,12 +47,12 @@ src/
     useVoiceRecorder.ts     录音采集与音量监测
     useAudioPlayer.ts       音频播放
   services/
-    backend/                数据后端适配层（本地 / Cloudflare Worker / Supabase 可换）
+    backend/                数据后端适配层（本地 / Cloudflare Pages Functions 可换）
       types.ts              后端契约（BackendProvider）
       merge.ts              本地与云端状态的合并规则
-      user-key.ts           用户密钥与同步码
-      worker-backend.ts     Cloudflare Workers + D1 实现
-      supabase-backend.ts   Supabase (PostgREST) 实现
+      account-client.ts     用户名 / 密码哈希 / 令牌 / 班级码纯函数（浏览器侧）
+      account-session.ts    会话持久化（令牌 + 账号 + 班级状态）
+      worker-backend.ts     Cloudflare Pages Functions + D1 实现
       local-backend.ts      本地模式与远端快照缓存
   utils/
     acoustic-features.ts       声学特征提取与量化
@@ -63,12 +65,14 @@ public/assets/
   video/   口型演示视频（MP4）
   words/   单词发音音频（MP3）
 backend/
-  cloudflare/   Worker 源码 + D1 建表 SQL + wrangler 配置
-  supabase/     Supabase 建表 SQL（含行级安全策略）
+  cloudflare/   Pages Function 源码 + D1 建表 SQL + wrangler 配置
+  supabase/     早期 Supabase 建表 SQL（已废弃，前端不再实现该 provider）
 scripts/
   build-phoneme-templates.ts   离线重建音素模板
   test-consolidation.ts        「待巩固」规则回归测试
   test-backend-sync.ts         云同步合并规则回归测试
+  test-account-auth.ts         账号 / 密码 / 令牌 / 班级码纯函数体检
+  test-account-session.ts      会话持久化体检
 print/    A4 打印版测验表（HTML + PDF）
 ```
 
@@ -116,19 +120,31 @@ VITE_BACKEND_KIND=worker
 VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 ```
 
-### 接入 Supabase
+### 接入 Supabase（已废弃）
 
-在 SQL Editor 里执行 `backend/supabase/schema.sql`，然后：
+前端只实现了 Cloudflare Pages Functions + D1 一种远端；`backend/supabase/` 下的 SQL 是早期方案，留作存档，当前不会被使用。
 
-```
-VITE_BACKEND_KIND=supabase
-VITE_BACKEND_URL=https://xxxx.supabase.co
-VITE_BACKEND_ANON_KEY=你的 anon key
-```
+## 账号与班级
 
-### 同步码
+账号体系只有三样东西：**用户名 + 密码 + 班级码**，没有邮箱验证、没有手机号、没有恢复码、也没有管理码。
 
-「我的数据」面板里可以设置一串**同步码**（至少 8 位）。同一串同步码在不同设备上指向同一份云端数据；不填就只在本机保存。
+| 角色 | 能做什么 |
+| --- | --- |
+| 任何人 | 注册账号（用户名 2–20 位，密码至少 6 位）、登录、退出登录、自己改密码 |
+| 学生 | 输入班级码加入班级，进度自动同步到云端；换设备用同一个账号登录即可拉回 |
+| 老师（建班者） | 建班拿到 8 位班级码、查看班级看板、踢人、重置学生密码、撤销班级 |
+
+实现要点：
+
+- 密码用 **PBKDF2-SHA256 / 20000 轮 / 每账号独立 16 字节 salt** 哈希，服务端只存哈希与 salt，明文不落库；
+- 登录后拿到一枚 32 字节 base64url **会话令牌**，后续请求放在 `x-phonics-token` 头，服务端只存令牌的 SHA-256 哈希；
+- 成员之间数据**互相隔离**，一个账号同时只能在一个班；换班前先退出；
+- 看板统计**只算学生**（老师不答题，计进分母会把平均正确率拉低）；
+- 看板不解析全量进度：写入进度时服务端冗余写一份统计，看板只读那一列，规避 Workers Free 的 10ms CPU 限制；
+- 没有账号 = **纯本机**，不发起任何云端请求；登录后本机进度按账号分区存放，同一台电脑上多个账号互不污染；
+- 忘记密码只能靠**老师在看板上重置**（生成临时密码并清掉该学生所有会话），这是无验证体系的必然代价。
+
+接口清单见 `backend/cloudflare/pages/functions/api/[[path]].ts` 顶部注释；纯函数体检见 `scripts/test-account-auth.ts`。
 
 ### 合并规则
 
