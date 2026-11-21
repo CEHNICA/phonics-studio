@@ -94,6 +94,10 @@ export interface ClassMemberSummary {
   createdAt: string;
   /** 是否已被移出班级 */
   revoked: boolean;
+  /** 该生当前最薄弱的音标 ID 列表（供老师看板按音素聚合全班卡点） */
+  weakTopIds?: string[];
+  /** 跟读平均/达标音标数 */
+  speakingPassedCount?: number;
 }
 
 /** 班级看板数据 */

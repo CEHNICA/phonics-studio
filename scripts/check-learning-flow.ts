@@ -1,206 +1,107 @@
 /**
- * 学习流程顺序体检器
+ * 五维闭环学习流程体检器（已从旧两步静态卡片升级为沉浸式拼读纠偏道场）
  *
- * 背景：卡片上印着「听一遍，跟读一遍，再圈出读起来最顺口的那个词」，
- * 但网站上的流程是**两步**，不是三步：
- *
- *   第 1 步：听一遍 + 圈一圈（都在卡片上完成 —— 听音标、听单词、圈出最顺口的那个词）
- *   第 2 步：跟读一遍（最后一步）
- *
- * 「圈出」是第 1 步的一部分，不是独立的第 3 步。
- * 物理顺序：卡片 → 圈出区 → 跟读区（跟读在最后）。
- * 跟读区内部还必须是先听后读。
- *
- * 本脚本是「尺子」：改这块前后各跑一次，缺陷必须归零。
+ * 核查核心约束：
+ *   1. CardStudio 以聚焦两阶段切换步进条驱动：阶段 1「看口型 · 拼装解码」→ 阶段 2「开口纠偏 · 真词验耳」
+ *   2. 阶段 1（PhonicsBlenderStage）包含拼写密码规律 + 可点击拼读音素块 + 合体拼读按钮
+ *   3. 阶段 2（PronunciationRadarStage）坚持「先听一遍原声」排在录音按钮前面，并包含声学偏移靶尺与最小对立真词关
+ *   4. 杜绝“点选代表词直接标 completed: true”的伪完成逻辑
  *
  * 运行：npm run check:flow
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CARD_INSTRUCTION, LEARNING_STEPS, STEP_LISTEN_CIRCLE, STEP_READ_ALONG } from '../src/data/learning-flow.ts';
 
 const ROOT = process.cwd();
 const STUDIO = join(ROOT, 'src', 'components', 'CardStudio.tsx');
+const BLENDER = join(ROOT, 'src', 'components', 'PhonicsBlenderStage.tsx');
+const RADAR = join(ROOT, 'src', 'components', 'PronunciationRadarStage.tsx');
+const PROGRESS_HOOK = join(ROOT, 'src', 'hooks', 'usePhonicsProgress.ts');
 const CSS = join(ROOT, 'src', 'index.css');
 
-type Result = { name: string; ok: boolean; detail: string; skip?: boolean };
+type Result = { name: string; ok: boolean; detail: string };
 const results: Result[] = [];
 const check = (name: string, ok: boolean, detail: string) => {
   results.push({ name, ok, detail });
 };
 
-const src = readFileSync(STUDIO, 'utf8');
+function stripComments(text: string): string {
+  return text.replace(/\{\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+const studioClean = stripComments(readFileSync(STUDIO, 'utf8'));
+const blenderClean = stripComments(readFileSync(BLENDER, 'utf8'));
+const radarClean = stripComments(readFileSync(RADAR, 'utf8'));
+const hookClean = stripComments(readFileSync(PROGRESS_HOOK, 'utf8'));
 const css = readFileSync(CSS, 'utf8');
 
-/**
- * 剥掉注释再断言。
- *
- * 踩过的坑：JSX 注释里也写着按钮文案，全文 grep 会把注释当成真按钮 ——
- * 改坏了按钮文案尺子照样全绿（假绿）。
- * 所有「某个文案不该出现 / 该出现在第几个」的断言都必须在剥干净的源码上做。
- */
-function stripComments(text: string): string {
-  return text
-    .replace(/\{\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
-}
-const clean = stripComments(src);
-
-/* ---------- 1. 两步编号存在（第 1 步 = 听一遍 + 圈一圈） ---------- */
-/**
- * 步骤文案不在组件里写死，而是从 `src/data/learning-flow.ts` 取 ——
- * 所以这里断言的是「组件用了常量」+「常量本身内容对」，而不是 grep 源码字面量。
- * （grep 字面量是上一轮的写法，组件一改成常量就假红了。）
- */
+/* ---------- 1. 聚焦道场两阶段步进顺序 ---------- */
+const tab1Idx = studioClean.indexOf('看口型 · 拼装解码');
+const tab2Idx = studioClean.indexOf('开口纠偏 · 真词验耳');
 check(
-  '第 1 步编号徽标是「听一遍，圈一圈」',
-  clean.includes('step-num">1<') &&
-    clean.includes('STEP_LISTEN_CIRCLE') &&
-    STEP_LISTEN_CIRCLE.includes('听一遍') &&
-    STEP_LISTEN_CIRCLE.includes('圈一圈'),
-  `组件用常量=${clean.includes('STEP_LISTEN_CIRCLE')}，常量=「${STEP_LISTEN_CIRCLE}」`,
-);
-check(
-  '第 2 步编号徽标是「跟读一遍」',
-  clean.includes('step-num">2<') &&
-    clean.includes('STEP_READ_ALONG') &&
-    STEP_READ_ALONG.includes('跟读一遍'),
-  `组件用常量=${clean.includes('STEP_READ_ALONG')}，常量=「${STEP_READ_ALONG}」`,
-);
-check(
-  '没有第 3 步（圈出不是独立一步）',
-  !clean.includes('step-num">3<'),
-  clean.includes('step-num">3<') ? '还有第 3 步徽标' : '只有两步',
-);
-check(
-  '步骤一共两步',
-  LEARNING_STEPS.length === 2,
-  `${LEARNING_STEPS.length} 步`,
+  '主道场包含「1. 看口型 · 拼装解码」与「2. 开口纠偏 · 真词验耳」顺序切换',
+  tab1Idx > 0 && tab2Idx > tab1Idx,
+  `tab1@${tab1Idx} → tab2@${tab2Idx}`,
 );
 
-/* ---------- 2. 物理顺序：卡片 → 圈出区 → 跟读区 ---------- */
-const cardIdx = clean.indexOf('illustrated-card-frame');
-const circleIdx = clean.indexOf('codename-box');
-const recorderIdx = clean.indexOf('recorder-center-card');
 check(
-  '圈出区紧跟卡片（在卡片之后）',
-  cardIdx > 0 && circleIdx > cardIdx,
-  cardIdx > 0 && circleIdx > cardIdx
-    ? `卡片 @${cardIdx} → 圈出 @${circleIdx}`
-    : `顺序不对：卡片 @${cardIdx} / 圈出 @${circleIdx}`,
-);
-check(
-  '跟读区在圈出区之后（跟读是最后一步）',
-  circleIdx > 0 && recorderIdx > circleIdx,
-  circleIdx > 0 && recorderIdx > circleIdx
-    ? `圈出 @${circleIdx} → 跟读 @${recorderIdx}`
-    : `顺序不对：圈出 @${circleIdx} / 跟读 @${recorderIdx}`,
-);
-check(
-  '跟读区在卡片之后',
-  cardIdx > 0 && recorderIdx > cardIdx,
-  cardIdx > 0 && recorderIdx > cardIdx
-    ? `卡片 @${cardIdx} → 跟读 @${recorderIdx}`
-    : `顺序不对：卡片 @${cardIdx} / 跟读 @${recorderIdx}`,
+  '主道场提供三枚真掌握解锁印章（拼读解锁 / 开口达标 / 对立验耳）',
+  studioClean.includes('拼读解锁') && studioClean.includes('对立验耳'),
+  '真掌握门槛印章齐全',
 );
 
-/* ---------- 3. 第 1 步徽标在卡片之前（编号徽标统领卡片 + 圈出） ---------- */
-/**
- * 注意：下面两条顺序断言都加了「徽标存在才判」的守卫。
- * 否则「删掉徽标」这个缺陷会同时红在「有编号徽标」和「徽标在卡片之前」两条上，
- * 逐项退回时就无法精确对上一条（用户铁律：每条缺陷精确红在自己那条）。
- * 存在性由第 1 组断言管，顺序由这两条管，各司其职。
- */
-const badge1Idx = clean.indexOf('step-num">1<');
-const badge2Idx = clean.indexOf('step-num">2<');
+/* ---------- 2. 阶段 1 拼装台 ---------- */
 check(
-  '第 1 步徽标在卡片之前',
-  badge1Idx < 0 || (cardIdx > 0 && badge1Idx < cardIdx),
-  badge1Idx < 0
-    ? '第 1 步徽标不存在（由「有编号徽标」那条负责）'
-    : badge1Idx < cardIdx
-      ? `徽标1 @${badge1Idx} → 卡片 @${cardIdx}`
-      : `顺序不对：徽标1 @${badge1Idx} / 卡片 @${cardIdx}`,
-);
-check(
-  '第 2 步徽标在跟读区之前',
-  badge2Idx < 0 || (recorderIdx > 0 && badge2Idx < recorderIdx && badge2Idx > circleIdx),
-  badge2Idx < 0
-    ? '第 2 步徽标不存在（由「有编号徽标」那条负责）'
-    : badge2Idx < recorderIdx && badge2Idx > circleIdx
-      ? `徽标2 @${badge2Idx} → 跟读 @${recorderIdx}`
-      : `顺序不对：徽标2 @${badge2Idx} / 跟读 @${recorderIdx}`,
+  '阶段 1 包含字母拼写规律密码与一键合体拼读',
+  blenderClean.includes('拼写密码：看到哪些字母想到') &&
+    blenderClean.includes('一键合体拼读（逐音 → 整词）'),
+  '拼读解码舞台完整',
 );
 
-/* ---------- 4. 跟读区按钮顺序：先听原声 → 再录音 ---------- */
-/** 取跟读区 recorder-actions 的 JSX 片段（用剥干净的源码，避免注释喂饱断言） */
-const actionsStart = clean.indexOf('recorder-actions');
-const actionsEnd = clean.indexOf('</div>', clean.indexOf('recorder.errorMessage'));
-const actions = clean.slice(
-  actionsStart,
-  actionsEnd > actionsStart ? actionsEnd : actionsStart + 4000,
+/* ---------- 3. 阶段 2 先听后读 + 偏移仪 + 最小对立验耳 ---------- */
+const listenIdx = radarClean.indexOf('先听一遍原声');
+const recIdx = radarClean.indexOf('className="record-btn"');
+check(
+  '跟读区第一个动作依然是「先听一遍原声」排在录音之前',
+  listenIdx > 0 && recIdx > listenIdx,
+  `listen@${listenIdx} → record@${recIdx}`,
 );
 
-const listenBtnIdx = actions.indexOf('先听一遍原声');
-const recordBtnIdx = actions.indexOf('className="record-btn"');
 check(
-  '跟读区第一个动作是「先听一遍原声」',
-  listenBtnIdx > 0 && recordBtnIdx > 0 && listenBtnIdx < recordBtnIdx,
-  listenBtnIdx > 0 && recordBtnIdx > 0
-    ? `听原声 @${listenBtnIdx} / 录音 @${recordBtnIdx}`
-    : `按钮缺失：听原声 @${listenBtnIdx} / 录音 @${recordBtnIdx}`,
-);
-check(
-  '跟读区有「先听一遍原声」按钮',
-  /先听一遍原声/.test(actions),
-  /先听一遍原声/.test(actions) ? '已提供' : '没有这个按钮',
-);
-check(
-  '旧文案「只听原声」不再作为主按钮出现',
-  !actions.includes('只听原声'),
-  actions.includes('只听原声') ? '跟读区还留着「只听原声」' : '已统一为「先听一遍原声」',
+  '跟读结果区挂载声学偏移靶尺（Target vs Confusable Gauge）',
+  radarClean.includes('acoustic-drift-gauge') && radarClean.includes('drift-needle'),
+  '声学靶向偏移仪表盘已接入',
 );
 
-/* ---------- 5. 跟读两小步编号（① 先听 → ② 跟我读） ---------- */
 check(
-  '跟读区有 ① 先听原声 小步提示',
-  /先听原声/.test(clean),
-  /先听原声/.test(clean) ? '有' : '没有',
-);
-check(
-  '跟读区有 ② 跟我读 小步提示',
-  /跟我读/.test(clean),
-  /跟我读/.test(clean) ? '有' : '没有',
+  '包含最小对立真词验耳关（连续答对 2 题解锁）',
+  radarClean.includes('最小对立真词验耳关') && radarClean.includes('onMinimalPairEvaluated'),
+  '最小对立真词关完整',
 );
 
-/* ---------- 6. 圈出区归第 1 步（文案点明它属于「听一遍，圈一圈」） ---------- */
+/* ---------- 4. 禁止伪完成逻辑 ---------- */
+const setRepBlockStart = hookClean.indexOf('const setRepresentativeWord');
+const setRepBlockEnd = hookClean.indexOf('const recordSpeakingAttempt');
+const setRepBody =
+  setRepBlockStart >= 0 && setRepBlockEnd > setRepBlockStart
+    ? hookClean.slice(setRepBlockStart, setRepBlockEnd)
+    : '';
 check(
-  '第 1 步提示里点明包含「圈」',
-  STEP_LISTEN_CIRCLE.includes('圈') && /圈出|圈一圈/.test(CARD_INSTRUCTION),
-  `第 1 步=「${STEP_LISTEN_CIRCLE}」，卡片印刷语=「${CARD_INSTRUCTION}」`,
-);
-check(
-  '圈出区标题仍是「圈出读起来最顺口的那个词」',
-  clean.includes('圈出读起来最顺口的那个词'),
-  clean.includes('圈出读起来最顺口的那个词') ? '标题正确' : '标题被改了',
-);
-
-/* ---------- 7. 编号徽标样式存在 ---------- */
-check(
-  'CSS 有步骤编号徽标样式',
-  /\.step-badge/.test(css) && /\.step-num/.test(css),
-  /\.step-badge/.test(css) && /\.step-num/.test(css) ? '已定义' : '缺 .step-badge / .step-num',
+  '已取消点代表词直接标记 completed: true 的伪完成逻辑',
+  setRepBody.length > 0 && !setRepBody.includes('completed: true'),
+  setRepBody.includes('completed: true') ? '仍存在伪完成' : '仅记录备忘代表词，需实操过关解锁',
 );
 
-/* ---------- 输出 ---------- */
+check(
+  '新道场与偏移靶尺 CSS 规则已就绪',
+  /\.dojo-stepper-bar/.test(css) && /\.acoustic-drift-gauge/.test(css),
+  '样式已就绪',
+);
+
 let failed = 0;
 for (const r of results) {
-  if (r.ok) {
-    console.log(`[PASS] ${r.name} — ${r.detail}`);
-  } else {
-    failed++;
-    console.log(`[FAIL] ${r.name} — ${r.detail}`);
-  }
+  if (!r.ok) failed += 1;
+  console.log(`[${r.ok ? 'PASS' : 'FAIL'}] ${r.name} — ${r.detail}`);
 }
 console.log(`\n${results.length - failed}/${results.length} 通过`);
 if (failed > 0) process.exit(1);

@@ -14,6 +14,12 @@ import {
   XCircle,
 } from 'lucide-react';
 import { CONFUSABLE_PAIRS, PHONEME_MAP, PHONEMES } from '../data/phonics-catalog';
+import {
+  CONFUSABLE_WORD_GROUPS,
+  MINIMAL_WORD_PAIRS,
+  PHONEME_DECODING_MAP,
+  getDistractorsForWord,
+} from '../data/phonics-decoding';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import type {
   ConfusablePair,
@@ -30,7 +36,7 @@ import {
   playWrongSfx,
 } from '../utils/sound-effects';
 
-type QuizMode = 'listen-card' | 'confusable' | 'word-phoneme' | 'ipa-word';
+type QuizMode = 'listen-card' | 'confusable' | 'word-phoneme' | 'ipa-word' | 'ipa-builder';
 
 interface QuizOption {
   key: string;
@@ -45,6 +51,9 @@ interface QuizQuestion {
   targetPhoneme: PhonemeItem;
   targetExample?: PhonemeExample;
   pairedPhoneme?: PhonemeItem;
+  /** 仅用于 ipa-builder 拼装题：正确音素顺序、打乱的积木池 */
+  builderSequence?: string[];
+  builderTilePool?: Array<{ key: string; symbol: string; phonemeId: string }>;
   promptTitle: string;
   promptSubtitle: string;
   options: QuizOption[];
@@ -70,9 +79,10 @@ const DEFAULT_ROUND_SIZE = 10;
 
 const MODE_LABELS: Array<{ id: QuizMode; label: string; desc: string }> = [
   { id: 'listen-card', label: '1. 听音选音标', desc: '4选1 · 辨音基础' },
-  { id: 'confusable', label: '2. 双胞胎辨音', desc: '2选1 · 易混对比' },
+  { id: 'confusable', label: '2. 双胞胎最小对立', desc: '2选1 · 真词与单音辨析' },
   { id: 'word-phoneme', label: '3. 听单词找核心音', desc: '4选1 · 真实词拼读' },
-  { id: 'ipa-word', label: '4. 看音标猜单词', desc: '4选1 · 音标反推' },
+  { id: 'ipa-word', label: '4. 看音标拼读猜词', desc: '4选1 · 近音防瞎蒙' },
+  { id: 'ipa-builder', label: '5. 音标积木拼装', desc: '按顺序拼出整词音标' },
 ];
 
 /**
@@ -146,6 +156,45 @@ function buildQuestionForTarget(
           : right;
     const pairedPhoneme = actualTarget.id === left.id ? right : left;
 
+    // 优先在最小对立真词中抽考（如 sheep vs ship），更有真实辨音迁移效果
+    const matchingWordPairs = MINIMAL_WORD_PAIRS.filter((mp) => mp.pairId === pair.id);
+    if (matchingWordPairs.length > 0 && Math.random() < 0.65) {
+      const wp = matchingWordPairs[Math.floor(Math.random() * matchingWordPairs.length)];
+      const isTargetLeft = actualTarget.id === wp.leftId;
+      const targetWord = isTargetLeft ? wp.leftWord : wp.rightWord;
+      const targetEx: PhonemeExample = {
+        word: targetWord,
+        phonetic: isTargetLeft ? wp.leftPhonetic : wp.rightPhonetic,
+        meaning: isTargetLeft ? wp.leftMeaning : wp.rightMeaning,
+      };
+      return {
+        mode,
+        targetPhoneme: actualTarget,
+        targetExample: targetEx,
+        pairedPhoneme,
+        promptTitle: '听真实单词，选出你听到的最小对立词',
+        promptSubtitle: `${pair.title} · 真词辨析`,
+        options: [
+          {
+            key: wp.leftId,
+            label: wp.leftWord,
+            subLabel: `${wp.leftPhonetic} · ${wp.leftMeaning}`,
+            phonemeId: wp.leftId,
+            wordAudio: wp.leftWord,
+          },
+          {
+            key: wp.rightId,
+            label: wp.rightWord,
+            subLabel: `${wp.rightPhonetic} · ${wp.rightMeaning}`,
+            phonemeId: wp.rightId,
+            wordAudio: wp.rightWord,
+          },
+        ],
+        correctKey: isTargetLeft ? wp.leftId : wp.rightId,
+        explanation: `${wp.focusTip}（答案：${targetEx.word} ${targetEx.phonetic}）`,
+      };
+    }
+
     return {
       mode,
       targetPhoneme: actualTarget,
@@ -168,6 +217,55 @@ function buildQuestionForTarget(
       ],
       correctKey: actualTarget.id,
       explanation: pair.keyDifference,
+    };
+  }
+
+  if (mode === 'ipa-builder') {
+    const spec = PHONEME_DECODING_MAP[target.id];
+    const blendWords = spec?.blendWords ?? [];
+    const chosenWord = blendWords[Math.floor(Math.random() * blendWords.length)] ?? {
+      word: target.examples[0].word,
+      phonetic: target.examples[0].phonetic,
+      meaning: target.examples[0].meaning,
+      segments: [{ letters: target.examples[0].word, phonemeId: target.id, symbol: target.symbol }],
+    };
+
+    const correctSymbols = chosenWord.segments.map((s) => s.symbol);
+    const usedIds = new Set(chosenWord.segments.map((s) => s.phonemeId));
+    const distractorCandidates = shuffleArray(
+      PHONEMES.filter((item) => !usedIds.has(item.id) && item.family === target.family),
+    ).slice(0, 2);
+
+    const tilePool = shuffleArray([
+      ...chosenWord.segments.map((seg, idx) => ({
+        key: `${seg.phonemeId}-${idx}`,
+        symbol: seg.symbol,
+        phonemeId: seg.phonemeId,
+      })),
+      ...distractorCandidates.map((d, idx) => ({
+        key: `dist-${d.id}-${idx}`,
+        symbol: d.symbol,
+        phonemeId: d.id,
+      })),
+    ]);
+
+    return {
+      mode: 'ipa-builder',
+      targetPhoneme: target,
+      targetExample: {
+        word: chosenWord.word,
+        phonetic: chosenWord.phonetic,
+        meaning: chosenWord.meaning,
+      },
+      builderSequence: correctSymbols,
+      builderTilePool: tilePool,
+      promptTitle: `听单词 ${chosenWord.word}（${chosenWord.meaning}），按顺序拼出完整音标`,
+      promptSubtitle: `共 ${correctSymbols.length} 个音素积木，点积木依次拼合（再点已选可撤回）`,
+      options: [],
+      correctKey: correctSymbols.join(''),
+      explanation: `${chosenWord.word} 拆音拼读为：${chosenWord.segments
+        .map((s) => `${s.letters}(${s.symbol})`)
+        .join(' + ')} → ${chosenWord.phonetic}`,
     };
   }
 
@@ -197,10 +295,20 @@ function buildQuestionForTarget(
   }
 
   if (mode === 'ipa-word') {
-    const targetExample = target.examples[Math.floor(Math.random() * target.examples.length)];
-    const distractors = shuffleArray(PHONEMES.filter((item) => item.id !== target.id))
-      .slice(0, 3)
-      .map((item) => item.examples[0]);
+    const allCandidateExamples = [
+      ...PHONEMES.flatMap((item) => item.examples),
+      ...CONFUSABLE_WORD_GROUPS.flatMap((g) => g.words),
+    ];
+    // 若当前音标有收录进近音强干扰群的词，优先抽这些真正容易看走眼的词
+    const preferredFromGroup = CONFUSABLE_WORD_GROUPS.flatMap((g) => g.words).filter((gw) =>
+      target.examples.some((ex) => ex.word.toLowerCase() === gw.word.toLowerCase()) ||
+      target.cardWords.some((cw) => cw.toLowerCase() === gw.word.toLowerCase()),
+    );
+    const targetExample =
+      preferredFromGroup.length > 0
+        ? preferredFromGroup[Math.floor(Math.random() * preferredFromGroup.length)]
+        : target.examples[Math.floor(Math.random() * target.examples.length)];
+    const distractors = getDistractorsForWord(targetExample.word, allCandidateExamples);
 
     const options = shuffleArray([targetExample, ...distractors]).map((example) => ({
       key: example.word,
@@ -214,11 +322,11 @@ function buildQuestionForTarget(
       mode,
       targetPhoneme: target,
       targetExample,
-      promptTitle: '看音标，拼出它是哪个英语单词？',
+      promptTitle: '看音标辨细节，它是下面哪个英语单词？',
       promptSubtitle: targetExample.phonetic,
       options,
       correctKey: targetExample.word,
-      explanation: `${targetExample.phonetic} 对应单词 ${targetExample.word}（${targetExample.meaning}），核心音素是 ${target.symbol}。`,
+      explanation: `${targetExample.phonetic} 对应单词 ${targetExample.word}（${targetExample.meaning}），重点留意包含的核心音素 ${target.symbol}。`,
     };
   }
 
@@ -295,6 +403,7 @@ export function ListeningQuiz({
   const [roundIndex, setRoundIndex] = useState<number>(0);
   const [attempts, setAttempts] = useState<RoundAttempt[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [builtTiles, setBuiltTiles] = useState<Array<{ key: string; symbol: string }>>([]);
   const [combo, setCombo] = useState<number>(0);
   const [roundBestCombo, setRoundBestCombo] = useState<number>(0);
   const [comboBurst, setComboBurst] = useState<number | null>(null);
@@ -322,6 +431,7 @@ export function ListeningQuiz({
       setRoundIndex(0);
       setAttempts([]);
       setSelectedKey(null);
+      setBuiltTiles([]);
       setCombo(0);
       setRoundBestCombo(0);
       setComboBurst(null);
@@ -333,10 +443,14 @@ export function ListeningQuiz({
 
   const playCurrentPromptAudio = useCallback(
     (targetQuestion: QuizQuestion) => {
-      if (targetQuestion.mode === 'ipa-word' || targetQuestion.mode === 'word-phoneme') {
-        if (targetQuestion.targetExample) {
-          speakWord(targetQuestion.targetExample.word);
-        }
+      if (
+        (targetQuestion.mode === 'ipa-word' ||
+          targetQuestion.mode === 'word-phoneme' ||
+          targetQuestion.mode === 'ipa-builder' ||
+          (targetQuestion.mode === 'confusable' && targetQuestion.targetExample)) &&
+        targetQuestion.targetExample
+      ) {
+        speakWord(targetQuestion.targetExample.word);
       } else {
         playPhonemeAudio(
           targetQuestion.targetPhoneme.localAudioSrc,
@@ -435,8 +549,30 @@ export function ListeningQuiz({
     }
     setRoundIndex((prev) => prev + 1);
     setSelectedKey(null);
+    setBuiltTiles([]);
     setShowWordSpellingHint(false);
   }, [questions.length, roundIndex, sfxEnabled]);
+
+  const handlePickBuilderTile = useCallback(
+    (tile: { key: string; symbol: string; phonemeId: string }) => {
+      if (selectedKey !== null || roundFinished || !currentQuestion?.builderSequence) {
+        return;
+      }
+      if (builtTiles.some((t) => t.key === tile.key)) {
+        return;
+      }
+      const segPhoneme = PHONEME_MAP[tile.phonemeId];
+      if (segPhoneme) {
+        playPhonemeAudio(segPhoneme.localAudioSrc, `tile-${tile.key}`);
+      }
+      const next = [...builtTiles, { key: tile.key, symbol: tile.symbol }];
+      setBuiltTiles(next);
+      if (next.length >= currentQuestion.builderSequence.length) {
+        handleChooseOption(next.map((t) => t.symbol).join(''));
+      }
+    },
+    [builtTiles, currentQuestion, handleChooseOption, playPhonemeAudio, roundFinished, selectedKey],
+  );
 
   // 键盘快捷键：1-4 选择，R 重听；未答时空格重听，答完后空格或 Enter 进入下一题
   useEffect(() => {
@@ -728,9 +864,12 @@ export function ListeningQuiz({
                 <span>
                   {currentQuestion.mode === 'ipa-word'
                     ? '偷听单词发音'
-                    : currentQuestion.mode === 'word-phoneme'
-                      ? '重听单词发音'
-                      : '重听音标发音'}
+                    : currentQuestion.mode === 'ipa-builder'
+                      ? '重听目标单词'
+                      : currentQuestion.mode === 'word-phoneme' ||
+                          (currentQuestion.mode === 'confusable' && currentQuestion.targetExample)
+                        ? '重听单词发音'
+                        : '重听音标发音'}
                   <span className="desktop-only-hint"> (R)</span>
                 </span>
               </button>
@@ -752,44 +891,94 @@ export function ListeningQuiz({
             </div>
           </div>
 
-          <div
-            className={`quiz-options-grid ${
-              currentQuestion.options.length === 2 ? 'two-cols' : 'four-cols'
-            }`}
-          >
-            {currentQuestion.options.map((option, idx) => {
-              const isAnswered = selectedKey !== null;
-              const isSelected = selectedKey === option.key;
-              const isCorrectOption = option.key === currentQuestion.correctKey;
+          {currentQuestion.mode === 'ipa-builder' && currentQuestion.builderTilePool ? (
+            <div className="ipa-builder-stage">
+              <div className="builder-answer-slots">
+                <span className="builder-slash">/</span>
+                {(currentQuestion.builderSequence ?? []).map((_, slotIdx) => {
+                  const chosen = builtTiles[slotIdx];
+                  return (
+                    <button
+                      key={`slot-${slotIdx}`}
+                      type="button"
+                      disabled={selectedKey !== null || !chosen}
+                      className={`builder-slot-box ${chosen ? 'filled' : ''} ${
+                        selectedKey !== null
+                          ? selectedKey === currentQuestion.correctKey
+                            ? 'correct'
+                            : 'wrong'
+                          : ''
+                      }`}
+                      onClick={() => {
+                        if (!chosen || selectedKey !== null) return;
+                        setBuiltTiles((prev) => prev.filter((t) => t.key !== chosen.key));
+                      }}
+                      title={chosen && selectedKey === null ? '点击撤销此积木' : undefined}
+                    >
+                      {chosen ? chosen.symbol.replaceAll('/', '') : '?'}
+                    </button>
+                  );
+                })}
+                <span className="builder-slash">/</span>
+              </div>
 
-              let stateClass = '';
-              if (isAnswered) {
-                if (isCorrectOption) {
-                  stateClass = 'correct';
-                } else if (isSelected) {
-                  stateClass = 'wrong';
-                } else {
-                  stateClass = 'dimmed';
+              <div className="builder-tiles-pool">
+                {currentQuestion.builderTilePool.map((tile) => {
+                  const isUsed = builtTiles.some((t) => t.key === tile.key);
+                  return (
+                    <button
+                      key={tile.key}
+                      type="button"
+                      disabled={isUsed || selectedKey !== null}
+                      className={`builder-tile-btn ${isUsed ? 'used' : ''}`}
+                      onClick={() => handlePickBuilderTile(tile)}
+                    >
+                      {tile.symbol}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`quiz-options-grid ${
+                currentQuestion.options.length === 2 ? 'two-cols' : 'four-cols'
+              }`}
+            >
+              {currentQuestion.options.map((option, idx) => {
+                const isAnswered = selectedKey !== null;
+                const isSelected = selectedKey === option.key;
+                const isCorrectOption = option.key === currentQuestion.correctKey;
+
+                let stateClass = '';
+                if (isAnswered) {
+                  if (isCorrectOption) {
+                    stateClass = 'correct';
+                  } else if (isSelected) {
+                    stateClass = 'wrong';
+                  } else {
+                    stateClass = 'dimmed';
+                  }
                 }
-              }
 
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  disabled={isAnswered}
-                  className={`quiz-option-card ${stateClass} ${
-                    isAnswered && isCorrectOption ? 'option-pop' : ''
-                  } ${isAnswered && isSelected && !isCorrectOption ? 'option-shake' : ''}`}
-                  onClick={() => handleChooseOption(option.key)}
-                >
-                  <span className="option-hotkey">{idx + 1}</span>
-                  <span className="option-main">{option.label}</span>
-                  {option.subLabel && <span className="option-sub">{option.subLabel}</span>}
-                </button>
-              );
-            })}
-          </div>
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    disabled={isAnswered}
+                    className={`quiz-option-card ${stateClass} ${
+                      isAnswered && isCorrectOption ? 'option-pop' : ''
+                    } ${isAnswered && isSelected && !isCorrectOption ? 'option-shake' : ''}`}
+                    onClick={() => handleChooseOption(option.key)}
+                  >
+                    <span className="option-hotkey">{idx + 1}</span>
+                    <span className="option-main">{option.label}</span>
+                    {option.subLabel && <span className="option-sub">{option.subLabel}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {selectedKey !== null && (
             <div className="quiz-feedback-panel">
@@ -809,7 +998,11 @@ export function ListeningQuiz({
                       <strong>
                         {currentQuestion.mode === 'ipa-word'
                           ? currentQuestion.correctKey
-                          : currentQuestion.targetPhoneme.symbol}
+                          : currentQuestion.mode === 'ipa-builder'
+                            ? `${currentQuestion.targetExample?.phonetic ?? ''} (${currentQuestion.targetExample?.word ?? ''})`
+                            : currentQuestion.mode === 'confusable' && currentQuestion.targetExample
+                              ? `${currentQuestion.targetExample.word} ${currentQuestion.targetExample.phonetic}`
+                              : currentQuestion.targetPhoneme.symbol}
                       </strong>
                     </span>
                   </span>

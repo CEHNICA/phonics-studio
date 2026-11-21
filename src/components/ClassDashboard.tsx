@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, KeyRound, RefreshCw, UserMinus, X } from 'lucide-react';
+import { Flame, GraduationCap, KeyRound, Printer, RefreshCw, UserMinus, X } from 'lucide-react';
+import { PHONEME_MAP } from '../data/phonics-catalog';
+import { getMinimalPairsForPhoneme } from '../data/phonics-decoding';
 import { getBackend } from '../services/backend';
 import {
   browserCacheStorage,
@@ -165,8 +167,86 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
       ? Math.round(members.reduce((sum, item) => sum + item.accuracy, 0) / count)
       : 0;
     const activeToday = members.filter((member) => isToday(member.lastSeenAt)).length;
-    return { count, avgCompleted, avgAccuracy, activeToday };
+    const weakCounter = new Map<string, number>();
+    for (const member of members) {
+      for (const pid of member.weakTopIds ?? []) {
+        weakCounter.set(pid, (weakCounter.get(pid) ?? 0) + 1);
+      }
+    }
+    const classWeakTop = Array.from(weakCounter.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, weakMembers]) => ({
+        id,
+        symbol: PHONEME_MAP[id]?.symbol ?? id,
+        weakMembers,
+        percent: count > 0 ? Math.round((weakMembers / count) * 100) : 0,
+      }));
+    return { count, avgCompleted, avgAccuracy, activeToday, classWeakTop };
   }, [overview]);
+
+  /** 生成并打开黑白 A4 课堂针对性巩固测试卷（优先涵盖全班共性薄弱音标） */
+  const handlePrintClassQuiz = () => {
+    const focusIds =
+      summary.classWeakTop.length > 0
+        ? summary.classWeakTop.map((w) => w.id)
+        : ['voiceless-th', 'voiced-th', 'short-ae', 'short-e', 'v', 'long-i'];
+    const escapeHtml = (text: string) =>
+      text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+
+    const rowsHtml = focusIds
+      .map((id, idx) => {
+        const phoneme = PHONEME_MAP[id];
+        if (!phoneme) return '';
+        const pair = getMinimalPairsForPhoneme(id)[0];
+        const pairLine = pair
+          ? `${escapeHtml(pair.leftWord)} (${escapeHtml(pair.leftPhonetic)})  vs  ${escapeHtml(pair.rightWord)} (${escapeHtml(pair.rightPhonetic)})`
+          : phoneme.examples
+              .slice(0, 2)
+              .map((ex) => `${escapeHtml(ex.word)} (${escapeHtml(ex.phonetic)})`)
+              .join('  /  ');
+        return `<tr>
+          <td>${idx + 1}</td>
+          <td style="font-size:16px;font-weight:700">${escapeHtml(phoneme.symbol)}</td>
+          <td>${escapeHtml(phoneme.categoryTitle)}</td>
+          <td>${pairLine}</td>
+          <td>[ &nbsp;&nbsp; ] 过关 &nbsp; [ &nbsp;&nbsp; ] 需再练</td>
+        </tr>`;
+      })
+      .join('');
+
+    const popup = window.open('', '_blank', 'width=900,height=700');
+    if (!popup) return;
+    const titleText = escapeHtml(overview?.space.name ?? '班级音标巩固测试卷');
+    popup.document.write(`<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8" /><title>${titleText} · A4 课堂小测</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm; }
+  body { font-family: "Microsoft YaHei", sans-serif; color: #111; line-height: 1.5; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 6px; border-bottom: 2px solid #111; padding-bottom: 6px; }
+  .meta { font-size: 13px; margin-bottom: 14px; display: flex; justify-content: space-between; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  th, td { border: 1px solid #222; padding: 9px 10px; text-align: left; }
+  th { background: #f0f0f0; }
+  .print-btn { margin-bottom: 12px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  @media print { .print-btn { display: none; } }
+</style></head>
+<body>
+  <button class="print-btn" onclick="window.print()">打印 A4 黑白测试单</button>
+  <h1>${titleText} · 高频薄弱音标课堂抽测卷</h1>
+  <div class="meta"><span>姓名：________________ &nbsp;&nbsp; 学号：________</span><span>日期：________________</span></div>
+  <p style="font-size:13px;margin:0 0 8px;">说明：老师朗读每组最小对立词之一，学生在对应词下划“√”，并依次拼读核查口型。</p>
+  <table>
+    <thead><tr><th style="width:42px">#</th><th style="width:76px">靶音标</th><th style="width:80px">类别</th><th>最小对立听辨与拼读抽测词</th><th style="width:155px">当堂验收</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body></html>`);
+    popup.document.close();
+  };
 
   const handleRevoke = async (accountId: string, name: string) => {
     const backend = getBackend();
@@ -284,6 +364,43 @@ export function ClassDashboard({ open, token, onClose }: ClassDashboardProps) {
                 <span>今天活跃</span>
                 <strong>{summary.activeToday}</strong>
               </div>
+            </div>
+
+            {/* 全班共性薄弱音标热力榜 + 一键 A4 针对性巩固小测 */}
+            <div className="class-radar-box">
+              <div className="class-radar-head">
+                <span className="class-radar-title">
+                  <Flame size={15} />
+                  <strong>全班共性卡点音标 Top 5</strong>
+                </span>
+                <button
+                  type="button"
+                  className="secondary-btn compact"
+                  onClick={handlePrintClassQuiz}
+                >
+                  <Printer size={14} />
+                  <span>生成本班 A4 黑白巩固卷</span>
+                </button>
+              </div>
+              {summary.classWeakTop.length === 0 ? (
+                <p className="class-radar-empty">
+                  目前还没有集中错音记录，学生跟读偏音或测验答错后会自动汇聚到这里；仍可直接点击右上角打印常考音标抽测卷。
+                </p>
+              ) : (
+                <div className="class-weak-bars">
+                  {summary.classWeakTop.map((item) => (
+                    <div key={item.id} className="class-weak-item">
+                      <span className="weak-item-symbol">{item.symbol}</span>
+                      <div className="weak-item-track">
+                        <div className="weak-item-fill" style={{ width: `${Math.max(12, item.percent)}%` }} />
+                      </div>
+                      <span className="weak-item-stat">
+                        {item.weakMembers} 人 ({item.percent}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="class-dashboard-table-wrap">

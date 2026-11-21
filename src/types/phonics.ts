@@ -55,7 +55,7 @@ export interface PhonemeItem extends RawPhonemeItem {
 export interface PhonemeProgress {
   /** 选择或输入的“我的代表词” */
   representativeWord: string;
-  /** 是否已完成学习 */
+  /** 是否已完成学习（真掌握或完成口型/拼读通关后解锁） */
   completed: boolean;
   /** 测验累计答错次数，用于筛选待巩固音标；连续答对达标后自动清零 */
   mistakeCount: number;
@@ -63,6 +63,16 @@ export interface PhonemeProgress {
   consecutiveCorrect: number;
   /** 最近学习时间戳 */
   lastStudiedAt?: string;
+  /** 跟读历史最高匹配分（0-99） */
+  speakingBestScore?: number;
+  /** 最近一次跟读被声学引擎判定偏向的易混音标 ID */
+  lastConfusedWithId?: string;
+  /** 是否已完成至少一次本音素的字母拼读拆解练习 */
+  blendedCompleted?: boolean;
+  /** 是否已通过本音相关的最小对立词辨音检验 */
+  minimalPairPassed?: boolean;
+  /** 建议下次复习的时间戳（ISO，用于间隔复习队列） */
+  nextReviewAt?: string;
 }
 
 export interface QuizStats {

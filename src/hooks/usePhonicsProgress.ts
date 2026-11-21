@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PHONEMES } from '../data/phonics-catalog';
-import { applyQuizOutcome, CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
+import {
+  applyQuizOutcome,
+  applySpeakingOutcome,
+  computePhonemeWeakScore,
+  CONSOLIDATE_THRESHOLD,
+  isTrueMastered,
+} from '../utils/consolidation';
 import { getBackend } from '../services/backend';
 import { localBackend } from '../services/backend/local-backend';
 import { mergeProgressState, MAX_ATTEMPTS } from '../services/backend/merge';
@@ -71,6 +77,11 @@ function normalizePhonemeProgress(raw: Partial<PhonemeProgress>): PhonemeProgres
     mistakeCount: raw.mistakeCount ?? 0,
     consecutiveCorrect: raw.consecutiveCorrect ?? 0,
     lastStudiedAt: raw.lastStudiedAt,
+    ...(raw.speakingBestScore !== undefined ? { speakingBestScore: raw.speakingBestScore } : {}),
+    ...(raw.lastConfusedWithId ? { lastConfusedWithId: raw.lastConfusedWithId } : {}),
+    ...(raw.blendedCompleted ? { blendedCompleted: raw.blendedCompleted } : {}),
+    ...(raw.minimalPairPassed ? { minimalPairPassed: raw.minimalPairPassed } : {}),
+    ...(raw.nextReviewAt ? { nextReviewAt: raw.nextReviewAt } : {}),
   };
 }
 
@@ -217,11 +228,58 @@ export function usePhonicsProgress() {
 
   const setRepresentativeWord = useCallback(
     (phonemeId: string, word: string) => {
+      // NOTE: 选词/记代表词只是记忆线索，不直接标为“已学完成”；
+      // 真正完成需经过拼读、跟读达标或最小对立词过关
       updatePhoneme(phonemeId, (prev) => ({
         ...prev,
         representativeWord: word,
-        completed: true,
       }));
+    },
+    [updatePhoneme],
+  );
+
+  /**
+   * 将跟读声学评测与易混偏移结论写入进度与待巩固队列
+   */
+  const recordSpeakingAttempt = useCallback(
+    (phonemeId: string, score: number, confusedWithId?: string) => {
+      updatePhoneme(phonemeId, (prev) => applySpeakingOutcome(prev, score, confusedWithId));
+    },
+    [updatePhoneme],
+  );
+
+  /**
+   * 记录完成该音标的字母拼装拆解练习
+   */
+  const markBlendedCompleted = useCallback(
+    (phonemeId: string) => {
+      updatePhoneme(phonemeId, (prev) => ({
+        ...prev,
+        blendedCompleted: true,
+      }));
+    },
+    [updatePhoneme],
+  );
+
+  /**
+   * 记录最小对立词辨音检验结果：达标解锁，失误计入待巩固
+   */
+  const markMinimalPairPassed = useCallback(
+    (phonemeId: string, passed: boolean) => {
+      updatePhoneme(phonemeId, (prev) => {
+        if (passed) {
+          return {
+            ...prev,
+            minimalPairPassed: true,
+            completed: true,
+          };
+        }
+        return {
+          ...prev,
+          mistakeCount: prev.mistakeCount + 1,
+          consecutiveCorrect: 0,
+        };
+      });
     },
     [updatePhoneme],
   );
@@ -749,7 +807,9 @@ export function usePhonicsProgress() {
 
   const summary = useMemo(() => {
     let completedCount = 0;
+    let trueMasteredCount = 0;
     let needReviewCount = 0;
+    const weakRank: Array<{ id: string; score: number }> = [];
 
     for (const item of PHONEMES) {
       const record = progress.phonemes[item.id];
@@ -759,15 +819,29 @@ export function usePhonicsProgress() {
       if (record.completed) {
         completedCount += 1;
       }
+      if (isTrueMastered(record)) {
+        trueMasteredCount += 1;
+      }
       if (record.mistakeCount > 0) {
         needReviewCount += 1;
       }
+      const weakScore = computePhonemeWeakScore(record);
+      if (weakScore > 0) {
+        weakRank.push({ id: item.id, score: weakScore });
+      }
     }
+
+    const weakTopIds = weakRank
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((item) => item.id);
 
     return {
       totalCount: PHONEMES.length,
       completedCount,
+      trueMasteredCount,
       needReviewCount,
+      weakTopIds,
       checkedDaysCount: progress.checkedDays.length,
       favoriteCount: favoriteIds.length,
     };
@@ -787,6 +861,9 @@ export function usePhonicsProgress() {
     authBusy,
     getPhonemeProgress,
     setRepresentativeWord,
+    recordSpeakingAttempt,
+    markBlendedCompleted,
+    markMinimalPairPassed,
     toggleCompleted,
     recordQuizAttempt,
     toggleFavorite,

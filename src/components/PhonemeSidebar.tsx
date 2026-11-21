@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Filter, Star } from 'lucide-react';
 import { PHONEME_CATEGORIES, PHONEME_MAP } from '../data/phonics-catalog';
-import { CONSOLIDATE_THRESHOLD } from '../utils/consolidation';
+import { CONSOLIDATE_THRESHOLD, isTrueMastered } from '../utils/consolidation';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
 
 export type ProgressFilter = 'all' | 'unlearned' | 'review' | 'mastered' | 'favorite';
@@ -94,7 +94,7 @@ export function PhonemeSidebar({
                   onClick={() => handlePickPhoneme(item.id)}
                 >
                   <span>{item.symbol}</span>
-                  {record.completed && (
+                  {isTrueMastered(record) && (
                     <CheckCircle2 size={11} className="strip-check" />
                   )}
                 </button>
@@ -175,13 +175,14 @@ export function PhonemeSidebar({
           ) : (
             phonemes.map((item) => {
               const record = getPhonemeProgress(item.id);
+              const mastered = isTrueMastered(record);
               const isSelected = item.id === currentPhonemeId;
               return (
                 <button
                   key={item.id}
                   type="button"
                   className={`phoneme-tile ${isSelected ? 'selected' : ''} ${
-                    record.completed ? 'completed' : ''
+                    mastered ? 'completed' : ''
                   }`}
                   onClick={() => handlePickPhoneme(item.id)}
                 >
@@ -198,8 +199,8 @@ export function PhonemeSidebar({
                         className="tile-dot review-dot"
                         title={`待巩固 · 连续答对 ${CONSOLIDATE_THRESHOLD} 次自动移出（已连对 ${record.consecutiveCorrect}/${CONSOLIDATE_THRESHOLD}）`}
                       />
-                    ) : record.completed ? (
-                      <span title="已掌握">
+                    ) : mastered ? (
+                      <span title="已真掌握">
                         <CheckCircle2 size={12} className="tile-check" />
                       </span>
                     ) : (

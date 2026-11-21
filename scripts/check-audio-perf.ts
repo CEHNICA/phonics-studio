@@ -83,7 +83,7 @@ if (!wordFiles) {
   check('单词音频目录存在', false, `缺少 ${WORDS_DIR}`);
 } else {
   const legacy = wordFiles.filter((f) => !f.endsWith('.v2.mp3'));
-  check('单词音频 190 个', wordFiles.length === 190, `实际 ${wordFiles.length} 个`);
+  check('单词音频不少于 221 个（含最小对立扩充词）', wordFiles.length >= 221, `实际 ${wordFiles.length} 个`);
   check(
     '单词音频全部为 .v2.mp3 版本',
     legacy.length === 0,
@@ -207,13 +207,16 @@ check(
         : `pending@${pendingBtnIdx} vs playing@${playingBtnIdx}`,
 );
 
-const pendingWordIdx = cardFlat.indexOf("isPendingCardWord ? '加载中'");
-const speakingWordIdx = cardFlat.indexOf("isSpeakingCardWord ? '朗读中'");
+const BLENDER_STAGE = join(ROOT, 'src', 'components', 'PhonicsBlenderStage.tsx');
+const blenderSrc = existsSync(BLENDER_STAGE) ? readFileSync(BLENDER_STAGE, 'utf8') : '';
+const blenderFlat = blenderSrc.replace(/\s+/g, ' ');
+const pendingWordIdx = blenderFlat.indexOf("isPendingCardWord ? '加载中'");
+const speakingWordIdx = blenderFlat.indexOf("isSpeakingCardWord ? '朗读中'");
 check(
   '单词热点「加载中」优先于「朗读中」',
-  cardSrc !== '' && pendingWordIdx >= 0 && speakingWordIdx >= 0 && pendingWordIdx < speakingWordIdx,
-  cardSrc === ''
-    ? '缺少 src/components/CardStudio.tsx'
+  blenderSrc !== '' && pendingWordIdx >= 0 && speakingWordIdx >= 0 && pendingWordIdx < speakingWordIdx,
+  blenderSrc === ''
+    ? '缺少 src/components/PhonicsBlenderStage.tsx'
     : pendingWordIdx < 0
       ? '未找到 isPendingCardWord ? \'加载中\' 分支'
       : speakingWordIdx < 0

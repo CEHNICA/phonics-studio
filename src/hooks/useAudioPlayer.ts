@@ -58,7 +58,19 @@ export function useAudioPlayer() {
   /** 正在等待下载、尚未出声的音频标识（如 `phoneme:long-i` / `word:tea`） */
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
+  const blendTimersRef = useRef<number[]>([]);
+  const blendSessionRef = useRef<number>(0);
+
+  const clearBlendTimers = useCallback(() => {
+    blendSessionRef.current += 1;
+    for (const id of blendTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    blendTimersRef.current = [];
+  }, []);
+
   const stopAudio = useCallback(() => {
+    clearBlendTimers();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -67,7 +79,7 @@ export function useAudioPlayer() {
     setPlayingId(null);
     setSpeakingWord(null);
     setPendingKey(null);
-  }, []);
+  }, [clearBlendTimers]);
 
   /**
    * 从队列里取音频开始下载，最多同时 MAX_PARALLEL_PRELOAD 个
@@ -222,6 +234,99 @@ export function useAudioPlayer() {
     [stopAudio],
   );
 
+  /**
+   * 依次播放音素片段后再合成播报整词，强化“见词能拼”听觉连结
+   */
+  const playBlendSequence = useCallback(
+    (
+      phonemeItems: Array<{ audioSrc: string; id: string }>,
+      wholeWord: string,
+      onStepChange?: (stepIndex: number) => void,
+    ) => {
+      stopAudio();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (phonemeItems.length === 0) {
+        onStepChange?.(-1);
+        return;
+      }
+
+      preloadUrls(phonemeItems.map((item) => item.audioSrc));
+      preloadWords([wholeWord]);
+
+      const session = blendSessionRef.current;
+      const playSegmentAt = (idx: number) => {
+        if (blendSessionRef.current !== session) {
+          return;
+        }
+        if (idx >= phonemeItems.length) {
+          onStepChange?.(phonemeItems.length);
+          const normalized = wholeWord.trim().toLowerCase();
+          const localSrc = `/assets/words/${encodeURIComponent(normalized)}.v2.mp3`;
+          const cached = preloadCacheRef.current.get(localSrc);
+          const wordAudio = cached ?? new Audio(localSrc);
+          wordAudio.currentTime = 0;
+          audioRef.current = wordAudio;
+          setSpeakingWord(wholeWord);
+          wordAudio.onended = () => {
+            setSpeakingWord((prev) => (prev === wholeWord ? null : prev));
+            onStepChange?.(-1);
+          };
+          wordAudio.onerror = () => {
+            setSpeakingWord((prev) => (prev === wholeWord ? null : prev));
+            onStepChange?.(-1);
+          };
+          void wordAudio.play().catch(() => {
+            setSpeakingWord(null);
+            onStepChange?.(-1);
+          });
+          return;
+        }
+
+        const item = phonemeItems[idx];
+        onStepChange?.(idx);
+        const cached = preloadCacheRef.current.get(item.audioSrc);
+        const segAudio = cached ?? new Audio(item.audioSrc);
+        segAudio.currentTime = 0;
+        audioRef.current = segAudio;
+        setPlayingId(item.id);
+
+        const advance = () => {
+          setPlayingId((prev) => (prev === item.id ? null : prev));
+          const timerId = window.setTimeout(() => playSegmentAt(idx + 1), 140);
+          blendTimersRef.current.push(timerId);
+        };
+
+        // 单个音素仅取核心前 520ms 节奏感，让拼合连贯不拖沓
+        const cutoffTimer = window.setTimeout(() => {
+          if (audioRef.current === segAudio && !segAudio.paused) {
+            segAudio.pause();
+            segAudio.currentTime = 0;
+            advance();
+          }
+        }, 560);
+        blendTimersRef.current.push(cutoffTimer);
+
+        segAudio.onended = () => {
+          window.clearTimeout(cutoffTimer);
+          advance();
+        };
+        segAudio.onerror = () => {
+          window.clearTimeout(cutoffTimer);
+          advance();
+        };
+        void segAudio.play().catch(() => {
+          window.clearTimeout(cutoffTimer);
+          advance();
+        });
+      };
+
+      playSegmentAt(0);
+    },
+    [preloadUrls, preloadWords, stopAudio],
+  );
+
   useEffect(() => {
     return () => {
       stopAudio();
@@ -237,6 +342,7 @@ export function useAudioPlayer() {
     pendingKey,
     playPhonemeAudio,
     speakWord,
+    playBlendSequence,
     preloadWords,
     preloadUrls,
     stopAudio,

@@ -46,6 +46,7 @@ export function mergePhonemeProgress(
   const localTime = timestampOf(local);
   const remoteTime = timestampOf(remote);
   const base = localTime >= remoteTime ? local : remote;
+  const bestScore = Math.max(local.speakingBestScore ?? 0, remote.speakingBestScore ?? 0);
 
   return {
     representativeWord: base.representativeWord,
@@ -56,6 +57,11 @@ export function mergePhonemeProgress(
       localTime >= remoteTime
         ? local.lastStudiedAt ?? remote.lastStudiedAt
         : remote.lastStudiedAt ?? local.lastStudiedAt,
+    ...(bestScore > 0 ? { speakingBestScore: bestScore } : {}),
+    ...(local.blendedCompleted || remote.blendedCompleted ? { blendedCompleted: true } : {}),
+    ...(local.minimalPairPassed || remote.minimalPairPassed ? { minimalPairPassed: true } : {}),
+    ...(base.lastConfusedWithId ? { lastConfusedWithId: base.lastConfusedWithId } : {}),
+    ...(base.nextReviewAt ? { nextReviewAt: base.nextReviewAt } : {}),
   };
 }
 

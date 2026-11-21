@@ -784,23 +784,28 @@ async function handleClassOverview(request: Request, env: Env): Promise<Response
     }>();
 
   const members = (result.results ?? []).map((row) => {
-    let stats: Record<string, number> = {};
+    let stats: Record<string, unknown> = {};
     try {
-      stats = JSON.parse(row.stats_json || '{}') as Record<string, number>;
+      stats = JSON.parse(row.stats_json || '{}') as Record<string, unknown>;
     } catch {
       stats = {};
     }
+    const weakTopIds = Array.isArray(stats.weakTopIds)
+      ? stats.weakTopIds.filter((id): id is string => typeof id === 'string').slice(0, 6)
+      : [];
     return {
       accountId: row.account_id,
       username: row.username || row.account_id,
       name: row.display_name || row.username || row.account_id,
       role: row.role,
-      completed: stats.completed ?? 0,
-      learned: stats.learned ?? 0,
-      checkedDays: stats.checkedDays ?? 0,
-      totalAnswered: stats.totalAnswered ?? 0,
-      totalCorrect: stats.totalCorrect ?? 0,
-      accuracy: stats.accuracy ?? 0,
+      completed: Number(stats.completed ?? 0),
+      learned: Number(stats.learned ?? 0),
+      checkedDays: Number(stats.checkedDays ?? 0),
+      totalAnswered: Number(stats.totalAnswered ?? 0),
+      totalCorrect: Number(stats.totalCorrect ?? 0),
+      accuracy: Number(stats.accuracy ?? 0),
+      weakTopIds,
+      speakingPassedCount: Number(stats.speakingPassedCount ?? 0),
       lastSeenAt: row.last_seen_at,
       createdAt: row.created_at,
       revoked: Boolean(row.revoked_at),
@@ -995,6 +1000,28 @@ async function handleMemberState(request: Request, env: Env): Promise<Response> 
   const learned = Object.values(phonemes).filter(
     (item) => (item as { completed?: boolean })?.completed,
   ).length;
+  const speakingPassedCount = Object.values(phonemes).filter(
+    (item) => ((item as { speakingBestScore?: number })?.speakingBestScore ?? 0) >= 72,
+  ).length;
+  const weakTopIds = Object.entries(phonemes)
+    .map(([id, raw]) => {
+      const item = (raw ?? {}) as {
+        mistakeCount?: number;
+        lastConfusedWithId?: string;
+        speakingBestScore?: number;
+      };
+      let score = (item.mistakeCount ?? 0) * 35;
+      if (item.lastConfusedWithId) score += 22;
+      if (item.speakingBestScore !== undefined && item.speakingBestScore < 72) {
+        score += 72 - item.speakingBestScore;
+      }
+      return { id, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map((entry) => entry.id);
+
   const checkedDays = Array.isArray(snapshot.checkedDays) ? snapshot.checkedDays.length : 0;
   const totalAnswered = snapshot.quizStats?.totalAnswered ?? 0;
   const totalCorrect = snapshot.quizStats?.totalCorrect ?? 0;
@@ -1006,6 +1033,8 @@ async function handleMemberState(request: Request, env: Env): Promise<Response> 
     totalAnswered,
     totalCorrect,
     accuracy,
+    speakingPassedCount,
+    weakTopIds,
   });
 
   await env.DB.prepare(

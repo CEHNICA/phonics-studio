@@ -3,6 +3,7 @@ import { CardStudio } from './components/CardStudio';
 import { TopHeader } from './components/TopHeader';
 import { CONFUSABLE_PAIRS, PHONEMES } from './data/phonics-catalog';
 import { usePhonicsProgress } from './hooks/usePhonicsProgress';
+import { computePhonemeWeakScore } from './utils/consolidation';
 import { getBackend } from './services/backend';
 import {
   browserCacheStorage,
@@ -71,6 +72,9 @@ export function App() {
     authBusy,
     getPhonemeProgress,
     setRepresentativeWord,
+    recordSpeakingAttempt,
+    markBlendedCompleted,
+    markMinimalPairPassed,
     toggleCompleted,
     recordQuizAttempt,
     toggleFavorite,
@@ -167,7 +171,7 @@ export function App() {
   const weakPhonemeIds = useMemo(() => {
     return PHONEMES.filter((item) => {
       const record = progress.phonemes[item.id];
-      return Boolean(record && record.mistakeCount > 0);
+      return Boolean(record && computePhonemeWeakScore(record) > 0);
     }).map((item) => item.id);
   }, [progress.phonemes]);
 
@@ -237,7 +241,7 @@ export function App() {
       <TopHeader
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        completedCount={summary.completedCount}
+        completedCount={summary.trueMasteredCount}
         needReviewCount={summary.needReviewCount}
         totalCount={summary.totalCount}
         checkedDaysCount={summary.checkedDaysCount}
@@ -262,6 +266,10 @@ export function App() {
           getPhonemeProgress={getPhonemeProgress}
           onSetRepresentativeWord={setRepresentativeWord}
           onToggleCompleted={toggleCompleted}
+          onBlendCompleted={markBlendedCompleted}
+          onSpeakingEvaluated={recordSpeakingAttempt}
+          onMinimalPairEvaluated={markMinimalPairPassed}
+          weakTopIds={summary.weakTopIds}
           dayFilterIds={dayFilterIds}
           dayFilterLabel={dayFilterLabel}
           onClearDayFilter={handleClearDayFilter}

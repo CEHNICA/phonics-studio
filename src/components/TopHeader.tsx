@@ -35,10 +35,10 @@ const SYNC_STATE_TEXT: Record<BackendState, string> = {
 };
 
 const NAV_ITEMS: Array<{ id: AppTab; label: string; shortLabel: string; icon: typeof BookOpen }> = [
-  { id: 'studio', label: '音标卡片馆', shortLabel: '卡片馆', icon: BookOpen },
-  { id: 'plan', label: '14天打卡路线', shortLabel: '14天计划', icon: CalendarDays },
-  { id: 'pairs', label: '双胞胎易混屋', shortLabel: '易混屋', icon: GitCompare },
-  { id: 'quiz', label: '听音闯关赛', shortLabel: '闯关赛', icon: Gamepad2 },
+  { id: 'studio', label: '拼读道场', shortLabel: '道场', icon: BookOpen },
+  { id: 'plan', label: '14天闯关路线', shortLabel: '14天', icon: CalendarDays },
+  { id: 'pairs', label: '最小对立对比屋', shortLabel: '对立屋', icon: GitCompare },
+  { id: 'quiz', label: '拼读辨音闯关', shortLabel: '闯关赛', icon: Gamepad2 },
 ];
 
 /**
@@ -64,9 +64,9 @@ export function TopHeader({
         <div className="brand-block">
           <div className="brand-badge">
             <Sparkles size={18} />
-            <span>初一音标进阶 · 48 音素</span>
+            <span>初一音标进阶 · 拼读纠偏道场</span>
           </div>
-          <h1 className="brand-title">手绘音标小铺</h1>
+          <h1 className="brand-title">48 音标拼读小铺</h1>
         </div>
 
         <nav className="nav-tabs" aria-label="学习模块切换">
@@ -88,8 +88,8 @@ export function TopHeader({
         </nav>
 
         <div className="header-stats">
-          <div className="stat-pill" title="已学习音标进度">
-            <span className="stat-label">已学</span>
+          <div className="stat-pill" title="已真掌握音标进度（需过关实操解锁）">
+            <span className="stat-label">已掌握</span>
             <strong>
               {completedCount}/{totalCount}
             </strong>

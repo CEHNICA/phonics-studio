@@ -3628,6 +3628,910 @@ button {
   cursor: not-allowed;
 }
 
+/* =========================================================
+ * 五维闭环拼读道场、声学偏移仪、最小对立、积木拼读与班级热力雷达
+ * ========================================================= */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.weak-focus-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, #fff5e8 0%, #fef0eb 100%);
+  border: 1px solid #f5cdb8;
+  color: #7c3818;
+  font-size: 13px;
+}
+
+.weak-focus-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weak-jump-btn {
+  border: 1px solid #d97745;
+  background: #ffffff;
+  color: #9c4014;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weak-jump-btn:hover {
+  background: #fff2eb;
+}
+
+.mastery-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mastery-chip.done {
+  background: var(--green-soft);
+  color: var(--green-ok);
+}
+
+.mastery-chip.learning {
+  background: var(--plum-soft);
+  color: var(--plum-deep);
+}
+
+.dojo-stepper-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--plum-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.dojo-stage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dojo-stage-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--plum-border);
+  background: var(--bg-cream);
+  color: var(--ink-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.dojo-stage-tab.active {
+  background: var(--plum-deep);
+  border-color: var(--plum-deep);
+  color: #ffffff;
+}
+
+.dojo-tab-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 12px;
+}
+
+.dojo-stage-tab:not(.active) .dojo-tab-num {
+  background: var(--plum-soft);
+  color: var(--plum-deep);
+}
+
+.dojo-stage-tab .tab-check {
+  color: #7bf1a8;
+}
+
+.dojo-seal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.seal-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f2eef9;
+  color: #7c7294;
+}
+
+.seal-pill.lit {
+  background: var(--green-soft);
+  color: var(--green-ok);
+}
+
+.complete-toggle-btn.compact {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.dojo-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.18fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.stage-done-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green-ok);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stage-done-pill.pending {
+  background: var(--butter-soft);
+  color: #9c6500;
+}
+
+/* 拼写密码与音素拼装工作台 */
+.spelling-patterns-box {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: #fbf8ff;
+  border: 1px solid #e6dcf8;
+}
+
+.patterns-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--plum-deep);
+  margin-bottom: 10px;
+}
+
+.patterns-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.pattern-chip-card {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--plum-border);
+}
+
+.pattern-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.pattern-letters {
+  font-size: 16px;
+  color: var(--coral-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.pattern-arrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--plum-mid);
+}
+
+.pattern-rule {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.pattern-example-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mini-word-audio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--plum-border);
+  background: var(--bg-cream);
+  color: var(--ink-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mini-word-audio-pill.speaking {
+  background: var(--plum-deep);
+  color: #ffffff;
+  border-color: var(--plum-deep);
+}
+
+.blend-workbench {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: #fffaf2;
+  border: 1px solid #f0dfbe;
+}
+
+.blend-word-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.blend-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.blend-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.blend-tab-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5d2ad;
+  background: #ffffff;
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.blend-tab-btn small {
+  color: var(--ink-secondary);
+  font-weight: 500;
+}
+
+.blend-tab-btn.active {
+  background: #533b8f;
+  border-color: #533b8f;
+  color: #ffffff;
+}
+
+.blend-tab-btn.active small {
+  color: #e4d9ff;
+}
+
+.blend-segments-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px dashed #dfcaa4;
+}
+
+.blend-segment-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blend-plus,
+.blend-equals {
+  font-size: 16px;
+  font-weight: 800;
+  color: #9e8865;
+}
+
+.segment-block {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--plum-border);
+  background: #faf7ff;
+  transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.segment-block.target-seg {
+  border-color: #d96b52;
+  background: #fff3f0;
+}
+
+.segment-block.active-lit {
+  transform: translateY(-4px) scale(1.06);
+  background: #392768;
+  border-color: #392768;
+  color: #ffffff;
+}
+
+.seg-letters {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.seg-symbol {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  margin-top: 2px;
+}
+
+.segment-block.active-lit .seg-symbol {
+  color: #ffd670;
+}
+
+.blend-result-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #25855a;
+  background: #eefaf4;
+  color: #17573b;
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+
+.blend-result-word.active-lit {
+  transform: scale(1.05);
+  background: #25855a;
+  color: #ffffff;
+}
+
+.blend-result-word strong {
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.blend-result-word span {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.blend-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* 折叠记忆卡片抽屉 */
+.memory-card-drawer {
+  margin-top: 14px;
+  border: 1px solid var(--plum-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.memory-card-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: none;
+  background: #f8f5fc;
+  color: var(--plum-deep);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.memory-toggle-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.memory-picked-tag {
+  font-style: normal;
+  background: var(--coral-soft);
+  color: var(--coral-accent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.memory-card-body {
+  padding: 12px;
+  border-top: 1px solid var(--plum-border);
+}
+
+.illustrated-card-frame.compact-frame {
+  max-width: 520px;
+  margin: 0 auto 10px;
+}
+
+.memory-rep-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-rep-hint {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+/* 声学偏移仪表盘 */
+.acoustic-drift-gauge {
+  margin: 12px 0;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--plum-border);
+}
+
+.drift-labels-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.drift-target {
+  color: var(--green-ok);
+}
+
+.drift-opponent {
+  color: var(--ink-secondary);
+}
+
+.drift-opponent.warn-active {
+  color: var(--coral-accent);
+}
+
+.drift-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: #ede9f7;
+  overflow: visible;
+}
+
+.drift-zone-safe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48%;
+  height: 100%;
+  border-radius: 999px 0 0 999px;
+  background: linear-gradient(90deg, #b8ebd0 0%, #e4f7ec 100%);
+}
+
+.drift-zone-warn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 45%;
+  height: 100%;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(90deg, #fff1df 0%, #fbd5cc 100%);
+}
+
+.drift-needle {
+  position: absolute;
+  top: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: left 0.25s ease;
+}
+
+.drift-needle.needle-ok {
+  background: var(--green-ok);
+}
+
+.drift-needle.needle-warn {
+  background: var(--coral-accent);
+}
+
+.drift-fix-actions {
+  margin-top: 9px;
+}
+
+/* 最小对立真词验耳关 */
+.minimal-pair-gate-card .streak-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--plum-soft);
+  color: var(--plum-deep);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.minimal-prompt-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.minimal-pair-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--plum-mid);
+  background: var(--plum-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.minimal-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.minimal-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 16px 12px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--plum-border);
+  background: #ffffff;
+  transition: border-color 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.minimal-choice-card:hover:not(:disabled) {
+  border-color: var(--plum-mid);
+  transform: translateY(-2px);
+}
+
+.minimal-choice-card.correct {
+  border-color: var(--green-ok);
+  background: var(--green-soft);
+}
+
+.minimal-choice-card.wrong {
+  border-color: var(--red-bad);
+  background: var(--red-soft);
+}
+
+.minimal-choice-card.dimmed {
+  opacity: 0.55;
+}
+
+.minimal-word {
+  font-size: 22px;
+  color: var(--ink-primary);
+}
+
+.minimal-phonetic {
+  font-size: 14px;
+  color: var(--plum-mid);
+  font-weight: 600;
+}
+
+.minimal-meaning {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.minimal-feedback-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: #faf8fd;
+  border: 1px solid var(--plum-border);
+}
+
+.minimal-feedback-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.minimal-focus-tip {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.minimal-compare-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 易混屋真词最小对立带 */
+.minimal-strip-section {
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--plum-border);
+}
+
+.minimal-strip-head {
+  font-size: 14px;
+  color: var(--plum-deep);
+  margin-bottom: 10px;
+}
+
+.minimal-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.minimal-pair-row-card {
+  padding: 11px;
+  border-radius: var(--radius-sm);
+  background: #faf8fd;
+  border: 1px solid var(--plum-border);
+}
+
+.minimal-pair-words {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.minimal-word-pill {
+  flex: 1;
+  min-width: 115px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--plum-border);
+  background: #ffffff;
+  color: var(--ink-primary);
+}
+
+.minimal-word-pill.speaking {
+  background: var(--plum-deep);
+  color: #ffffff;
+  border-color: var(--plum-deep);
+}
+
+.minimal-word-pill span {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.minimal-word-pill small {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.minimal-vs-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--coral-accent);
+}
+
+.minimal-pair-tip {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+/* 听音闯关：音标积木拼装 */
+.ipa-builder-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.builder-answer-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.builder-slash {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--plum-mid);
+}
+
+.builder-slot-box {
+  min-width: 62px;
+  height: 54px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 2px dashed #b9aadf;
+  background: #faf8ff;
+  font-size: 20px;
+  font-weight: 700;
+  color: #9e94b8;
+}
+
+.builder-slot-box.filled {
+  border-style: solid;
+  border-color: var(--plum-deep);
+  background: #ffffff;
+  color: var(--plum-deep);
+}
+
+.builder-slot-box.correct {
+  border-color: var(--green-ok);
+  background: var(--green-soft);
+  color: var(--green-ok);
+}
+
+.builder-slot-box.wrong {
+  border-color: var(--red-bad);
+  background: var(--red-soft);
+  color: var(--red-bad);
+}
+
+.builder-tiles-pool {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.builder-tile-btn {
+  min-width: 74px;
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--plum-border);
+  background: #ffffff;
+  color: var(--ink-primary);
+  font-size: 19px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+
+.builder-tile-btn:hover:not(:disabled) {
+  border-color: var(--plum-deep);
+  background: var(--plum-soft);
+}
+
+.builder-tile-btn.used {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 老师端全班共性卡点热力雷达 */
+.class-radar-box {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: #faf8ff;
+  border: 1px solid var(--plum-border);
+}
+
+.class-radar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.class-radar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--plum-deep);
+}
+
+.class-radar-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.class-weak-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.class-weak-item {
+  display: grid;
+  grid-template-columns: 64px 1fr 86px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.weak-item-symbol {
+  font-weight: 800;
+  color: var(--plum-deep);
+}
+
+.weak-item-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e9e2f8;
+  overflow: hidden;
+}
+
+.weak-item-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f29d4b 0%, #d9534f 100%);
+}
+
+.weak-item-stat {
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+@media (max-width: 980px) {
+  .dojo-stage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- 动效降级：尊重系统的「减弱动态效果」 ---------- */
 /*
  * 用户在系统里开了「减弱动态效果 / reduce motion」后，这些动画必须停下来：
@@ -3646,7 +4550,11 @@ button {
   .quiz-result-card.result-settle-in,
   .combo-badge.hot,
   .quiz-option-card.option-pop,
-  .quiz-option-card.option-shake {
+  .quiz-option-card.option-shake,
+  .segment-block,
+  .blend-result-word,
+  .drift-needle,
+  .minimal-choice-card {
     animation: none !important;
     transition: none !important;
   }

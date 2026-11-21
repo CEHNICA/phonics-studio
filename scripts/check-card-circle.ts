@@ -24,7 +24,7 @@ import {
 const rootArg = process.argv.find((a) => a.startsWith('--root='));
 const ROOT = rootArg ? rootArg.slice('--root='.length) : process.cwd();
 const CARDS_DIR = join(ROOT, 'public', 'assets', 'cards');
-const STUDIO = join(ROOT, 'src', 'components', 'CardStudio.tsx');
+const BLENDER = join(ROOT, 'src', 'components', 'PhonicsBlenderStage.tsx');
 const CSS = join(ROOT, 'src', 'index.css');
 const QUIZ = join(ROOT, 'src', 'components', 'ListeningQuiz.tsx');
 
@@ -167,25 +167,25 @@ if (!ffmpeg || skipAssetLayer) {
 }
 
 /* ---------- 3. 源码层：圈层与坐标系 ---------- */
-const studioSrc = existsSync(STUDIO) ? readFileSync(STUDIO, 'utf8') : '';
+const blenderSrc = existsSync(BLENDER) ? readFileSync(BLENDER, 'utf8') : '';
 const cssSrc = existsSync(CSS) ? readFileSync(CSS, 'utf8') : '';
 const quizSrc = existsSync(QUIZ) ? readFileSync(QUIZ, 'utf8') : '';
 
-check('CardStudio.tsx 存在', studioSrc.length > 0, STUDIO);
+check('PhonicsBlenderStage.tsx 存在', blenderSrc.length > 0, BLENDER);
 check(
   '圈层 SVG 使用 viewBox="0 0 1050 623"（与卡片图同坐标系）',
-  studioSrc.includes('viewBox="0 0 1050 623"'),
-  studioSrc.includes('viewBox="0 0 1050 623"') ? '已锁定坐标系' : '圈与图片会对不齐',
+  blenderSrc.includes('viewBox="0 0 1050 623"'),
+  blenderSrc.includes('viewBox="0 0 1050 623"') ? '已锁定坐标系' : '圈与图片会对不齐',
 );
 check(
   '圈层 SVG 使用 preserveAspectRatio="none"（铺满卡片，保持等比定位）',
-  studioSrc.includes('preserveAspectRatio="none"'),
-  studioSrc.includes('preserveAspectRatio="none"') ? '已设置' : '缺失会导致圈变形偏移',
+  blenderSrc.includes('preserveAspectRatio="none"'),
+  blenderSrc.includes('preserveAspectRatio="none"') ? '已设置' : '缺失会导致圈变形偏移',
 );
 check(
   '存在圈层容器 className="card-circle-layer"',
-  studioSrc.includes('className="card-circle-layer"'),
-  studioSrc.includes('className="card-circle-layer"') ? '已挂载' : '圈层没渲染出来',
+  blenderSrc.includes('className="card-circle-layer"'),
+  blenderSrc.includes('className="card-circle-layer"') ? '已挂载' : '圈层没渲染出来',
 );
 check(
   '圈层 CSS 设为 pointer-events: none（不能挡住卡片热点的点击）',
@@ -193,15 +193,15 @@ check(
   /\.card-circle-layer\s*\{[^}]*pointer-events:\s*none/.test(cssSrc) ? '已设置' : '圈会挡住「点词朗读」',
 );
 check(
-  '圈由 currentProgress.representativeWord 驱动（不引入第二个状态源）',
-  studioSrc.includes('currentProgress.representativeWord') &&
-    /circleSlotFor\(\s*currentProgress\.representativeWord/.test(studioSrc),
-  studioSrc.includes('currentProgress.representativeWord') ? '已绑定进度状态' : '圈没跟进度状态联动',
+  '圈由 progress.representativeWord 驱动（不引入第二个状态源）',
+  blenderSrc.includes('progress.representativeWord') &&
+    /circleSlotFor\(\s*progress\.representativeWord/.test(blenderSrc),
+  blenderSrc.includes('progress.representativeWord') ? '已绑定进度状态' : '圈没跟进度状态联动',
 );
 check(
   '卡片热点点击仍是「朗读」（圈不抢听的动作）',
-  /onClick=\{\(\)\s*=>\s*\{\s*speakWord\(word\)/.test(studioSrc),
-  '点词只朗读，圈由下方 A/B/C 触发',
+  /onClick=\{\(\)\s*=>\s*onSpeakWord\(word\)\}/.test(blenderSrc),
+  '点词只朗读，圈由下方备忘芯片触发',
 );
 
 /* ---------- 4. 纯函数真跑 ---------- */
@@ -258,9 +258,9 @@ check(
   quizSrc.includes('你圈出的词') ? '已改口径' : '测验页仍写「你的代号词」',
 );
 check(
-  '圈出区标题改成「圈出读起来最顺口的那个词」',
-  studioSrc.includes('圈出读起来最顺口的那个词'),
-  studioSrc.includes('圈出读起来最顺口的那个词') ? '与卡片印刷文案对齐' : '标题仍是旧口径',
+  '记忆卡抽屉提供清晰的圈备忘代表词指引',
+  blenderSrc.includes('顺手圈一个最喜欢的联想代表词'),
+  blenderSrc.includes('顺手圈一个最喜欢的联想代表词') ? '保留备忘词与红圈对齐体验' : '缺失备忘圈词提示',
 );
 
 /* ---------- 6. 素材体积没有被这一轮弄大 ---------- */
