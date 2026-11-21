@@ -9,7 +9,7 @@
  * 运行：npm run check:role
  * 退回验证用：npx tsx scripts/check-class-role.ts --root=<改坏了的源码副本>
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -28,6 +28,30 @@ const read = (rel: string): string => {
   if (!existsSync(file)) return '';
   return readFileSync(file, 'utf8');
 };
+
+/**
+ * 递归收集 src/ 下所有源码文件。
+ *
+ * 为什么要有这个：上一版尺子只扫 UserDataPanel.tsx 一个文件，
+ * 结果 usePhonicsProgress.ts 里还留着「还没进班级」的旧文案 —— 尺子自己漏检了。
+ * 文案这类东西要全仓扫，只盯一个文件迟早漏。
+ */
+function collectSrcSources(dir = join(ROOT, 'src')): Array<{ rel: string; text: string }> {
+  const out: Array<{ rel: string; text: string }> = [];
+  const walk = (current: string) => {
+    if (!existsSync(current)) return;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        out.push({ rel: full.slice(ROOT.length + 1).replace(/\\/g, '/'), text: readFileSync(full, 'utf8') });
+      }
+    }
+  };
+  walk(dir);
+  return out;
+}
 
 const BACKEND_REL = 'backend/cloudflare/pages/functions/api/[[path]].ts';
 const PANEL_REL = 'src/components/UserDataPanel.tsx';
@@ -283,6 +307,24 @@ if (panelSrc) {
 } else {
   check('账号面板源码可读', false, `缺少 ${PANEL_REL}`);
 }
+
+/* ---------- 6.5 全仓文案口径（不能只扫面板一个文件） ---------- */
+
+const STALE_CLASS_COPY = ['还没进班级', '没进班级'];
+const srcSources = collectSrcSources();
+const staleCopyHits: string[] = [];
+for (const { rel, text } of srcSources) {
+  for (const stale of STALE_CLASS_COPY) {
+    if (text.includes(stale)) {
+      staleCopyHits.push(`${rel} → 「${stale}」`);
+    }
+  }
+}
+check(
+  '整个 src/ 都不出现旧口径「进班级」（学生说「加入班级」，老师说「建班级」）',
+  srcSources.length > 0 && staleCopyHits.length === 0,
+  staleCopyHits.join('; ') || 'src/ 下没扫到任何源码，检查器本身有问题',
+);
 
 /* ---------- 7. 前端：请求体带上身份 ---------- */
 

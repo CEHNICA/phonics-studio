@@ -341,7 +341,7 @@ export function usePhonicsProgress() {
   }, [applySession, session]);
 
   /**
-   * 把当前状态推送到云端（没登录 / 没进班级 / 没接入远端 = 纯本机，不推送）
+   * 把当前状态推送到云端（没登录 / 还没加入班级 / 没接入远端 = 纯本机，不推送）
    */
   const pushToCloud = useCallback(
     async (state: UserProgressState): Promise<boolean> => {
@@ -350,7 +350,7 @@ export function usePhonicsProgress() {
         return false;
       }
       if (!session.membership) {
-        // 还没进班级：云端没有可写的成员通道，本机保存即可，不算同步失败
+        // 还没加入班级：云端没有可写的成员通道，本机保存即可，不算同步失败
         setBackendState('local');
         return true;
       }
@@ -390,9 +390,9 @@ export function usePhonicsProgress() {
       return;
     }
     if (!session.membership) {
-      // 还没进班级：没有云端通道，别报同步失败
+      // 还没加入班级：没有云端通道，别报同步失败
       setBackendState('local');
-      setAuthError('还没进班级，进班之后才会同步到云端');
+      setAuthError('还没加入班级，进班之后才会同步到云端');
       return;
     }
     setBackendState('connecting');
@@ -426,7 +426,7 @@ export function usePhonicsProgress() {
       };
     }
     if (!session.membership) {
-      // 已登录但还没进班级：没有成员通道，不请求云端（也不算失败）
+      // 已登录但还没加入班级：没有成员通道，不请求云端（也不算失败）
       hydratedRef.current = true;
       void (async () => {
         setBackendState('local');
