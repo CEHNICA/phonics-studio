@@ -82,7 +82,10 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
   const loading = refreshing || (open && !overview && !error);
 
   const summary = useMemo(() => {
-    const members = (overview?.members ?? []).filter((member) => !member.revoked);
+    // 统计只看学生：老师自己不在班级里答题，计进分母会把平均分拉低
+    const members = (overview?.members ?? []).filter(
+      (member) => !member.revoked && member.role !== 'owner',
+    );
     const count = members.length;
     const avgCompleted = count
       ? Math.round((members.reduce((sum, item) => sum + item.completed, 0) / count) * 10) / 10
@@ -171,7 +174,7 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
           <>
             <div className="class-dashboard-summary">
               <div className="class-summary-card">
-                <span>在册成员</span>
+                <span>在册学生</span>
                 <strong>{summary.count}</strong>
               </div>
               <div className="class-summary-card">
@@ -197,9 +200,9 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                   <tr>
                     <th>成员</th>
                     <th>身份</th>
-                    <th className="class-col-num">已学</th>
+                    <th className="class-col-num">已学(个)</th>
                     <th className="class-col-num">打卡(天)</th>
-                    <th className="class-col-num">答题</th>
+                    <th className="class-col-num">答题(道)</th>
                     <th className="class-col-num">正确率</th>
                     <th>最近活跃</th>
                     <th className="class-col-action">操作</th>
@@ -216,7 +219,13 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                   {overview.members.map((member) => (
                     <tr
                       key={member.memberId}
-                      className={member.revoked ? 'class-member-revoked' : undefined}
+                      className={
+                        member.revoked
+                          ? 'class-member-revoked'
+                          : member.role === 'owner'
+                            ? 'class-member-owner'
+                            : undefined
+                      }
                     >
                       <td>
                         <span className="class-member-name">
@@ -224,7 +233,13 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                           {member.revoked && <em>已移出</em>}
                         </span>
                       </td>
-                      <td>{member.role === 'owner' ? '老师' : '学生'}</td>
+                      <td>
+                        {member.role === 'owner' ? (
+                          <span className="class-role-badge">老师</span>
+                        ) : (
+                          '学生'
+                        )}
+                      </td>
                       <td className="class-col-num">{member.completed}</td>
                       <td className="class-col-num">{member.checkedDays}</td>
                       <td className="class-col-num">{member.totalAnswered}</td>

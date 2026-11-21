@@ -94,7 +94,13 @@ export function UserDataPanel({
 
   const codeKind = detectCodeKind(codeInput);
   const actionLabel =
-    codeKind === 'recovery' ? '恢复进度' : codeKind === 'owner' ? '打开看板' : '加入班级';
+    codeKind === 'recovery'
+      ? '恢复进度'
+      : codeKind === 'owner'
+        ? '打开看板'
+        : codeInput.trim()
+          ? '加入班级'
+          : '请输入码';
 
   const handleSubmitCode = () => {
     const value = codeInput.trim();
@@ -209,13 +215,16 @@ export function UserDataPanel({
           )}
 
           {isOwner && identity?.ownerKey && (
-            <button
-              type="button"
-              className="user-data-primary-btn user-data-primary-btn-block"
-              onClick={() => onOpenDashboard(identity.ownerKey as string)}
-            >
-              打开班级看板
-            </button>
+            <>
+              <button
+                type="button"
+                className="user-data-primary-btn user-data-primary-btn-block"
+                onClick={() => onOpenDashboard(identity.ownerKey as string)}
+              >
+                打开班级看板
+              </button>
+              <div className="user-data-divider" />
+            </>
           )}
 
           <label className="user-data-code-label" htmlFor="sync-code-input">
@@ -238,7 +247,7 @@ export function UserDataPanel({
             <button
               type="button"
               className="user-data-code-btn"
-              disabled={identityBusy}
+              disabled={identityBusy || !codeInput.trim()}
               onClick={handleSubmitCode}
             >
               {identityBusy ? '处理中…' : actionLabel}
@@ -273,55 +282,60 @@ export function UserDataPanel({
             </button>
           </div>
 
-          <div className="user-data-divider" />
+          {identity && (
+            <>
+              <div className="user-data-divider" />
 
-          <div className="user-data-code-list">
-            {isOwner && identity?.joinCode && (
-              <div className="user-data-code-row-item">
-                <span className="user-data-code-name">班级码</span>
-                <button
-                  type="button"
-                  className="user-data-link-btn"
-                  onClick={() =>
-                    setViewCode({
-                      title: '班级码（发给学生，他们输入即可加入）',
-                      value: formatJoinCode(identity.joinCode as string),
-                    })
-                  }
-                >
-                  查看
-                </button>
+              <div className="user-data-code-list">
+                {isOwner && identity.joinCode && (
+                  <div className="user-data-code-row-item">
+                    <span className="user-data-code-name">班级码</span>
+                    <button
+                      type="button"
+                      className="user-data-link-btn"
+                      onClick={() =>
+                        setViewCode({
+                          title: '班级码（发给学生，他们输入即可加入）',
+                          value: formatJoinCode(identity.joinCode as string),
+                        })
+                      }
+                    >
+                      查看
+                    </button>
+                  </div>
+                )}
+                <div className="user-data-code-row-item">
+                  <span className="user-data-code-name">我的恢复码</span>
+                  <button
+                    type="button"
+                    className="user-data-link-btn"
+                    onClick={() =>
+                      setViewCode({ title: '我的恢复码（换设备时用）', value: identity.recoveryKey })
+                    }
+                  >
+                    查看
+                  </button>
+                </div>
+                {isOwner && identity.ownerKey && (
+                  <div className="user-data-code-row-item">
+                    <span className="user-data-code-name">管理码</span>
+                    <button
+                      type="button"
+                      className="user-data-link-btn"
+                      onClick={() =>
+                        setViewCode({
+                          title: '管理码（只有你能看班级看板）',
+                          value: identity.ownerKey as string,
+                        })
+                      }
+                    >
+                      查看
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-            {identity && (
-              <div className="user-data-code-row-item">
-                <span className="user-data-code-name">我的恢复码</span>
-                <button
-                  type="button"
-                  className="user-data-link-btn"
-                  onClick={() =>
-                    setViewCode({ title: '我的恢复码（换设备时用）', value: identity.recoveryKey })
-                  }
-                >
-                  查看
-                </button>
-              </div>
-            )}
-            {isOwner && identity?.ownerKey && (
-              <div className="user-data-code-row-item">
-                <span className="user-data-code-name">管理码</span>
-                <button
-                  type="button"
-                  className="user-data-link-btn"
-                  onClick={() =>
-                    setViewCode({ title: '管理码（只有你能看班级看板）', value: identity.ownerKey as string })
-                  }
-                >
-                  查看
-                </button>
-              </div>
-            )}
-          </div>
+            </>
+          )}
 
           {identity && (
             <button

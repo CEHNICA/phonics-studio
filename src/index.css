@@ -2677,23 +2677,27 @@ button {
 .user-data-code-input {
   flex: 1;
   min-width: 0;
+  height: 36px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--plum-border);
   background: var(--bg-cream);
   font-size: 13px;
+  line-height: 20px;
   font-family: inherit;
   text-overflow: ellipsis;
 }
 
 .user-data-code-btn,
 .user-data-sync-btn {
+  height: 36px;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--plum-mid);
   background: var(--plum-mid);
   color: #ffffff;
   font-size: 13px;
+  line-height: 20px;
   font-weight: 600;
 }
 
@@ -2745,7 +2749,7 @@ button {
   gap: 5px;
   padding: 7px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--plum-border);
+  border: 1px solid #b6a4e4;
   background: var(--bg-cream);
   color: var(--plum-deep);
   font-size: 13px;
@@ -2817,7 +2821,6 @@ button {
 .user-data-code-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .user-data-code-row-item {
@@ -2825,6 +2828,12 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--plum-border);
+}
+
+.user-data-code-row-item:last-child {
+  border-bottom: none;
 }
 
 .user-data-code-name {
@@ -3021,13 +3030,31 @@ button {
   font-weight: 600;
 }
 
+.class-dashboard-table thead th {
+  border-bottom: 1px solid #b6a4e4;
+}
+
 .class-dashboard-table .class-col-num {
-  text-align: center;
+  text-align: right;
 }
 
 .class-dashboard-table .class-col-action {
   width: 1%;
   white-space: nowrap;
+}
+
+.class-member-owner {
+  background: var(--plum-soft);
+}
+
+.class-role-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--plum-mid);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .class-member-name {
@@ -3073,7 +3100,7 @@ button {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  padding-top: 12px;
+  padding-top: 16px;
   border-top: 1px solid var(--plum-border);
   font-size: 12px;
   color: var(--ink-secondary);
@@ -3081,15 +3108,15 @@ button {
 
 .class-dashboard-revoke-space {
   margin-left: auto;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--red-bad);
-  background: var(--bg-surface);
+  padding: 2px 0;
+  border: none;
+  background: none;
   color: var(--red-bad);
   font-size: 12px;
   font-weight: 600;
+  text-decoration: underline;
 }
 
 .class-dashboard-revoke-space:hover {
-  background: var(--red-soft);
+  color: #9b2020;
 }
