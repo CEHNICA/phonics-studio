@@ -176,7 +176,10 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
               </div>
               <div className="class-summary-card">
                 <span>平均已学</span>
-                <strong>{summary.avgCompleted}</strong>
+                <strong>
+                  {summary.avgCompleted}
+                  <em>个</em>
+                </strong>
               </div>
               <div className="class-summary-card">
                 <span>平均正确率</span>
@@ -194,12 +197,12 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                   <tr>
                     <th>成员</th>
                     <th>身份</th>
-                    <th>已学</th>
-                    <th>打卡</th>
-                    <th>答题</th>
-                    <th>正确率</th>
+                    <th className="class-col-num">已学</th>
+                    <th className="class-col-num">打卡(天)</th>
+                    <th className="class-col-num">答题</th>
+                    <th className="class-col-num">正确率</th>
                     <th>最近活跃</th>
-                    <th />
+                    <th className="class-col-action">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -215,17 +218,19 @@ export function ClassDashboard({ open, ownerKey, onClose }: ClassDashboardProps)
                       key={member.memberId}
                       className={member.revoked ? 'class-member-revoked' : undefined}
                     >
-                      <td className="class-member-name">
-                        {member.name}
-                        {member.revoked && <em>已移出</em>}
+                      <td>
+                        <span className="class-member-name">
+                          {member.role === 'owner' ? '我（老师）' : member.name}
+                          {member.revoked && <em>已移出</em>}
+                        </span>
                       </td>
                       <td>{member.role === 'owner' ? '老师' : '学生'}</td>
-                      <td>{member.completed}</td>
-                      <td>{member.checkedDays} 天</td>
-                      <td>{member.totalAnswered}</td>
-                      <td>{member.accuracy}%</td>
+                      <td className="class-col-num">{member.completed}</td>
+                      <td className="class-col-num">{member.checkedDays}</td>
+                      <td className="class-col-num">{member.totalAnswered}</td>
+                      <td className="class-col-num">{member.accuracy}%</td>
                       <td>{formatTime(member.lastSeenAt)}</td>
-                      <td>
+                      <td className="class-col-action">
                         {member.role !== 'owner' && !member.revoked && (
                           <button
                             type="button"

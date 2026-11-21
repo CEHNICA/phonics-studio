@@ -189,7 +189,7 @@ export function UserDataPanel({
           )}
         </section>
 
-        <section className="user-data-section">
+        <section className="user-data-section user-data-section--sync">
           <div className="user-data-section-title">
             {backendState === 'offline' || backendState === 'error' ? (
               <CloudOff size={14} />
@@ -208,15 +208,25 @@ export function UserDataPanel({
             <p className="user-data-sync-time">最近同步：{formatAttemptTime(lastSyncedAt)}</p>
           )}
 
+          {isOwner && identity?.ownerKey && (
+            <button
+              type="button"
+              className="user-data-primary-btn user-data-primary-btn-block"
+              onClick={() => onOpenDashboard(identity.ownerKey as string)}
+            >
+              打开班级看板
+            </button>
+          )}
+
           <label className="user-data-code-label" htmlFor="sync-code-input">
-            粘贴班级码加入班级，或粘贴恢复密钥找回进度
+            粘贴班级码 / 恢复码 / 管理码，按前缀自动分流
           </label>
           <div className="user-data-code-row">
             <input
               id="sync-code-input"
               type="text"
               className="user-data-code-input"
-              placeholder="班级码 / PH- 恢复密钥 / OW- 管理码"
+              placeholder="班级码 / 恢复码 / 管理码"
               value={codeInput}
               onChange={(event) => setCodeInput(event.target.value)}
               onKeyDown={(event) => {
@@ -238,14 +248,11 @@ export function UserDataPanel({
           {identityError && <p className="user-data-code-error">{identityError}</p>}
 
           <div className="user-data-action-row">
-            <button
-              type="button"
-              className="user-data-sync-btn"
-              disabled={!identity}
-              onClick={onSyncNow}
-            >
-              立即同步
-            </button>
+            {identity && (
+              <button type="button" className="user-data-sync-btn" onClick={onSyncNow}>
+                立即同步
+              </button>
+            )}
             {!identity && (
               <button
                 type="button"
@@ -286,27 +293,28 @@ export function UserDataPanel({
                 </button>
               </div>
             )}
-            <div className="user-data-code-row-item">
-              <span className="user-data-code-name">我的恢复码</span>
-              <button
-                type="button"
-                className="user-data-link-btn"
-                disabled={!identity}
-                onClick={() =>
-                  setViewCode({ title: '我的恢复码（换设备时用）', value: identity?.recoveryKey ?? '' })
-                }
-              >
-                查看
-              </button>
-            </div>
-            {isOwner && (
+            {identity && (
+              <div className="user-data-code-row-item">
+                <span className="user-data-code-name">我的恢复码</span>
+                <button
+                  type="button"
+                  className="user-data-link-btn"
+                  onClick={() =>
+                    setViewCode({ title: '我的恢复码（换设备时用）', value: identity.recoveryKey })
+                  }
+                >
+                  查看
+                </button>
+              </div>
+            )}
+            {isOwner && identity?.ownerKey && (
               <div className="user-data-code-row-item">
                 <span className="user-data-code-name">管理码</span>
                 <button
                   type="button"
                   className="user-data-link-btn"
                   onClick={() =>
-                    setViewCode({ title: '管理码（只有你能看班级看板）', value: identity?.ownerKey ?? '' })
+                    setViewCode({ title: '管理码（只有你能看班级看板）', value: identity.ownerKey as string })
                   }
                 >
                   查看
@@ -314,16 +322,6 @@ export function UserDataPanel({
               </div>
             )}
           </div>
-
-          {isOwner && identity?.ownerKey && (
-            <button
-              type="button"
-              className="user-data-primary-btn"
-              onClick={() => onOpenDashboard(identity.ownerKey as string)}
-            >
-              打开班级看板
-            </button>
-          )}
 
           {identity && (
             <button

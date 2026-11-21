@@ -2683,6 +2683,7 @@ button {
   background: var(--bg-cream);
   font-size: 13px;
   font-family: inherit;
+  text-overflow: ellipsis;
 }
 
 .user-data-code-btn,
@@ -2731,6 +2732,11 @@ button {
   gap: 8px;
 }
 
+.user-data-action-row > button {
+  flex: 1 1 120px;
+  justify-content: center;
+}
+
 .user-data-ghost-btn,
 .user-data-primary-btn,
 .user-data-link-btn {
@@ -2771,13 +2777,26 @@ button {
 
 .user-data-link-btn {
   padding: 4px 10px;
+  border-color: #b6a4e4;
+  background: #ffffff;
+  color: var(--plum-deep);
   font-size: 12px;
   font-weight: 600;
 }
 
+.user-data-primary-btn-block {
+  width: 100%;
+  justify-content: center;
+}
+
+.user-data-section--sync {
+  flex: 1 1 auto;
+}
+
 .user-data-text-btn {
   align-self: flex-start;
-  padding: 0;
+  margin-top: auto;
+  padding-top: 14px;
   border: none;
   background: none;
   color: var(--ink-secondary);
@@ -2970,6 +2989,14 @@ button {
   color: var(--plum-deep);
 }
 
+.class-summary-card strong em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 3px;
+  color: var(--ink-secondary);
+}
+
 .class-dashboard-table-wrap {
   overflow-x: auto;
 }
@@ -2994,8 +3021,17 @@ button {
   font-weight: 600;
 }
 
+.class-dashboard-table .class-col-num {
+  text-align: center;
+}
+
+.class-dashboard-table .class-col-action {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .class-member-name {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-weight: 600;
@@ -3037,11 +3073,14 @@ button {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--plum-border);
   font-size: 12px;
   color: var(--ink-secondary);
 }
 
 .class-dashboard-revoke-space {
+  margin-left: auto;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--red-bad);
