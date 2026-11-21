@@ -424,6 +424,12 @@ export function CardStudio({
         <div className="studio-grid">
           {/* 左栏：手绘卡片 → 跟读模仿 → 圈出最顺口的词 */}
           <section className="card-stage-panel">
+            {/* 第 1 步：听发音 */}
+            <div className="step-badge">
+              <span className="step-num">1</span>
+              <span className="step-text">听发音</span>
+              <span className="step-subhint">点一下卡片，听这个音怎么读</span>
+            </div>
             <div className="illustrated-card-frame">
               <div className={`illustrated-card-inner ${cardPulse ? 'tap-bounce' : ''}`}>
                 <img
@@ -495,14 +501,38 @@ export function CardStudio({
               </div>
             </div>
 
-            {/* 听完标准音立刻跟读：录音与匹配度对比 */}
+            {/* 第 2 步：听完就跟读（先听原声，再跟读） */}
+            <div className="step-badge">
+              <span className="step-num">2</span>
+              <span className="step-text">跟读一遍</span>
+              <span className="step-subhint">先听一遍原声，再开口跟读</span>
+            </div>
             <div className="lab-card recorder-center-card">
               <div className="lab-card-header">
                 <h3>听完就跟读</h3>
                 <span className="subtle-hint">先听标准音，马上模仿录音；录音保存在本机，切换音标也不会丢</span>
               </div>
 
+              <div className="recorder-step-line">
+                <span className="step-num">①</span>
+                <span>先听原声</span>
+                <span className="recorder-step-arrow">→</span>
+                <span className="step-num">②</span>
+                <span>跟我读一遍</span>
+              </div>
+
               <div className="recorder-actions">
+                {/* ① 先听一遍原声 —— 跟读前的第一步，放在所有跟读按钮最前面 */}
+                <button
+                  type="button"
+                  className="primary-audio-btn compact"
+                  onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
+                  title="先听一遍标准原声，听完再开口跟读"
+                >
+                  <Volume2 size={15} />
+                  <span>先听一遍原声</span>
+                </button>
+
                 {!recorder.isRecording ? (
                   <button
                     type="button"
@@ -551,15 +581,6 @@ export function CardStudio({
                 >
                   <Play size={14} />
                   <span>{recorder.isPlayingRecording ? '回放中...' : '只听我的'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-btn compact"
-                  onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
-                >
-                  <Volume2 size={14} />
-                  <span>只听原声</span>
                 </button>
 
                 {recorder.recordedUrl && (
@@ -694,7 +715,12 @@ export function CardStudio({
                 </div>
               )}
             </div>
-            {/* 圈出最顺口的词：红圈画在卡片上那个词的位置 */}
+            {/* 第 3 步：圈出最顺口的词（红圈画在卡片上那个词的位置） */}
+            <div className="step-badge">
+              <span className="step-num">3</span>
+              <span className="step-text">圈出最顺口的词</span>
+              <span className="step-subhint">在卡片上把读起来最顺口的那个词圈起来</span>
+            </div>
             <div className={`card-homework-box codename-box ${namedFlash ? 'named-flash' : ''}`}>
               <div className="homework-row">
                 <div className="homework-label-row">

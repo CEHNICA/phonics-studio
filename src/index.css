@@ -685,6 +685,62 @@ button {
   background: var(--coral-accent);
 }
 
+/* 三步流程编号徽标：听发音 → 跟读一遍 → 圈出最顺口的词 */
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--plum-deep);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.step-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--plum-deep);
+}
+
+.step-subhint {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+/* 跟读区里的小步提示（① 先听原声 → ② 跟我读） */
+.recorder-step-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--plum-deep);
+}
+
+.recorder-step-line .step-num {
+  background: var(--plum-mid);
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
+.recorder-step-arrow {
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
 /* 卡片底部：代号词（可选记忆锚点） */
 .card-homework-box {
   background: var(--bg-surface);

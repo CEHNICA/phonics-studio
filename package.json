@@ -12,6 +12,8 @@
     "check:audio": "node scripts/check-audio-perf.ts",
     "check:cards": "node scripts/check-cards-perf.ts",
     "check:circle": "node scripts/check-card-circle.ts",
+    "check:flow": "node scripts/check-learning-flow.ts",
+    "e2e:flow": "node scripts/e2e-learning-flow.ts",
     "check:js": "node scripts/check-js-budget.ts",
     "preview": "vite preview",
     "check:record": "node scripts/check-record.ts",

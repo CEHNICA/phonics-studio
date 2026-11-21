@@ -181,6 +181,18 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 **坑：卡片插画里本来就有大面积红色**（苹果、船…）。做像素级验证时不能全图找红像素 —— 会把插画当成圈。必须先取圈层 `<ellipse>` 的屏幕矩形，只在那一个窗口里找红像素。
 
+### 改「三步学习流程顺序」前必读
+
+卡片上印的是「听一遍，跟读一遍，再圈出读起来最顺口的词」，网站上必须按这个顺序显式呈现，不能让人自己猜：
+
+1. **左栏三个区块带步骤编号徽标**：1 听发音 → 2 跟读一遍 → 3 圈出最顺口的词。徽标在区块**外面**（`step-badge`），编号用 `step-num`。
+2. **跟读区内部也是两步**：先放「① 先听原声 → ② 跟我读一遍」提示行，**第一个按钮必须是「先听一遍原声」**，录音按钮排在它后面。旧的「只听原声」按钮已删除，别加回来。
+3. **顺序有两条独立的尺子**：`check:flow` 看源码 DOM 顺序，`e2e-learning-flow.ts` 看浏览器里的**实际像素位置**和按钮顺序。DOM 对 ≠ 用户看到的对（CSS 也能改视觉顺序）。
+
+**坑（尺子自身的坑，本轮踩到）**：`scripts/check-learning-flow.ts` 里所有「某文案不该出现 / 该出现在第几个」的断言都必须在**剥掉注释后的源码**上做。JSX 注释里也写着按钮文案，全文 grep 会把注释当成真按钮 —— 改坏按钮文案尺子照样全绿（假绿）。尺子里有 `stripComments()` 处理这个。
+
+改完必须 `npm run check:flow` **11/11 通过** + `node scripts/e2e-learning-flow.ts` **14/14 通过**再提交。
+
 ### 体检器（尺子）
 
 | 命令 | 管什么 |
@@ -195,6 +207,8 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:role-e2e` | 上面那条尺子的**线上真机版**（Playwright，20 项）：身份切换、邀请码必填、学生面板无「创建班级」、老师建班 → 学生加入的闭环。改账号/班级权限后除了 `check:role` 还要跑它 |
 | `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（23 项） |
 | `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
+| `npm run check:flow` | 「三步学习流程顺序」：三步编号徽标齐全、圈出区排在跟读区之后、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（11 项） |
+| `npm run e2e:flow` | 上面那条尺子的**浏览器真机版**（Playwright，14 项）：三步徽标在页面上从上到下、圈出区**视觉上**在跟读区下面、「先听一遍原声」是跟读区第一个按钮 |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
@@ -206,7 +220,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -235,6 +249,8 @@ git add -A; git commit -m "..."; git push origin main
 - **UI 里 pending 必须排在 playing 前面**（2026-11 已修）：`useAudioPlayer` 的 `setPlayingId` 是在 `play()` **之前**调用的，所以只要点了 `isPlayingCurrentAudio` 立刻为 true。把「正在播放...」写在「加载中...」前面，pending 反馈就永远显示不出来 —— 弱网下用户点了没声、按钮却说在播。`npm run check:audio` 里有两条守护断言专门盯这个顺序（且断言前会把源码空白归一化，避免 JSX 多行造成假阳性）。
 - Lucide 图标组件不接受 `title` prop（TS2322），要 tooltip 得外包 `<span title=...>`。
 - **Playwright 的 JS API 和 Python API 不是一套东西** —— JS 里是 `page.$()` / `page.locator()` / `page.$$eval()` / `element.textContent()`；`page.querySelector()` / `context.new_page()` 在 JS 里根本不存在（那是 Python 的写法）。写 E2E 前先照着 `scripts/e2e-role-ui.cjs` 的写法抄，别凭记忆写。
+- **别在 JSDoc 里写 `*/}`** —— 会把注释提前闭合，Node 的类型剥离直接报 `ERR_INVALID_TYPESCRIPT_SYNTAX`。要举 JSX 注释的例子就把 `*/` 拆开写。
+- **尺子断言文案前先剥注释** —— JSX 注释里也写着按钮文案，全文 grep 会把注释当真按钮，改坏按钮文案尺子照样全绿（假绿）。见上面「改三步学习流程顺序前必读」。
 - **别用 PowerShell 批量正则改 JS 脚本** —— 双引号里的 `$(` 会被当子表达式吃掉，`page.$('.x')` 直接被改坏成 `page..x`，语法全崩。要改就用 edit/write 工具重写整个文件。
 - **仓库里没有 playwright 依赖** —— `scripts/e2e-role-ui.cjs` 自己会去找全局 `node_modules`（含 `NODE_PATH`），找不到就报错退出（exit 2），不会静默跳过。
 - `@vue-macros/nuxt` 那类 reactivity transform 下 `$ref` 变量在 script 里**不能写 `.value`**（静默 undefined）。
