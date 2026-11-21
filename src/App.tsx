@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CardStudio } from './components/CardStudio';
+import { ClassDashboard } from './components/ClassDashboard';
 import { ConfusablePairsLab } from './components/ConfusablePairsLab';
 import { FourteenDayPlan } from './components/FourteenDayPlan';
 import { ListeningQuiz } from './components/ListeningQuiz';
@@ -7,6 +8,7 @@ import { TopHeader } from './components/TopHeader';
 import { UserDataPanel } from './components/UserDataPanel';
 import { CONFUSABLE_PAIRS, PHONEMES } from './data/phonics-catalog';
 import { usePhonicsProgress } from './hooks/usePhonicsProgress';
+import { detectCodeKind } from './services/backend/space-client';
 import type { AppTab, StudyDayPlan } from './types/phonics';
 
 /**
@@ -19,6 +21,7 @@ export function App() {
   const [dayFilterLabel, setDayFilterLabel] = useState<string | null>(null);
   const [initialPairId, setInitialPairId] = useState<string | undefined>(undefined);
   const [userDataOpen, setUserDataOpen] = useState<boolean>(false);
+  const [dashboardOwnerKey, setDashboardOwnerKey] = useState<string | null>(null);
 
   const {
     progress,
@@ -26,7 +29,9 @@ export function App() {
     backendState,
     lastSyncedAt,
     favoriteIds,
-    syncCode,
+    identity,
+    identityError,
+    identityBusy,
     getPhonemeProgress,
     setRepresentativeWord,
     toggleCompleted,
@@ -35,8 +40,26 @@ export function App() {
     isFavorite,
     resetAllProgress,
     syncNow,
-    applySyncCode,
+    joinClass,
+    recoverProgress,
+    createClass,
+    createPersonalSpace,
+    leaveSpace,
   } = usePhonicsProgress();
+
+  /**
+   * 面板里那一个码输入框：按前缀分流（班级码 → 加入，PH- → 恢复，OW- → 看板）
+   */
+  const handleSubmitCode = useCallback(
+    (code: string) => {
+      if (detectCodeKind(code) === 'recovery') {
+        void recoverProgress(code);
+        return;
+      }
+      void joinClass(code);
+    },
+    [joinClass, recoverProgress],
+  );
 
   const handleOpenInStudio = useCallback((phonemeId: string) => {
     setDayFilterIds(null);
@@ -147,12 +170,31 @@ export function App() {
         attempts={progress.attempts}
         backendState={backendState}
         lastSyncedAt={lastSyncedAt}
-        syncCode={syncCode}
+        identity={identity}
+        identityError={identityError}
+        identityBusy={identityBusy}
         onSelectPhoneme={handleOpenInStudio}
         onSyncNow={() => {
           void syncNow();
         }}
-        onApplySyncCode={applySyncCode}
+        onSubmitCode={handleSubmitCode}
+        onCreateClass={(name) => {
+          void createClass(name);
+        }}
+        onCreatePersonal={() => {
+          void createPersonalSpace();
+        }}
+        onOpenDashboard={(ownerKey) => {
+          setDashboardOwnerKey(ownerKey);
+          setUserDataOpen(false);
+        }}
+        onLeaveSpace={leaveSpace}
+      />
+
+      <ClassDashboard
+        open={Boolean(dashboardOwnerKey)}
+        ownerKey={dashboardOwnerKey ?? ''}
+        onClose={() => setDashboardOwnerKey(null)}
       />
     </div>
   );

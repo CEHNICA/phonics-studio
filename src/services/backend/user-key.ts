@@ -4,7 +4,13 @@
  * - 设备密钥：浏览器首次运行时生成的随机串，仅用于本机身份；
  * - 同步码：用户手动设置的一串口令，设置后即作为云端身份（同一串口令跨设备共享同一份数据）。
  * 两者都只以不透明字符串形式随请求头发送，服务端不解析其含义。
+ *
+ * 新身份模型（班级码 / 恢复密钥 / 管理码）见 space-client.ts：
+ * 加入空间之后，云端身份改用成员 ID（memberId），同步码这套旧机制只保留给
+ * 未升级的老页面继续工作。
  */
+
+import { loadIdentity } from './space-client';
 
 const DEVICE_KEY_STORAGE = 'phonics-studio-user-key-v1';
 const SYNC_CODE_STORAGE = 'phonics-studio-sync-code-v1';
@@ -89,8 +95,11 @@ export function setSyncCode(code: string): void {
 }
 
 /**
- * 当前生效的用户密钥：有同步码用同步码，否则用设备密钥
+ * 当前生效的用户密钥：
+ * - 已加入空间（班级 / 个人）→ 成员 ID，成员之间天然隔离；
+ * - 尚未加入任何空间 → 设备密钥（纯本机身份，不写云端）。
  */
 export function currentUserKey(): string {
-  return getSyncCode() ?? getOrCreateDeviceKey();
+  const identity = loadIdentity();
+  return identity?.memberId ?? getOrCreateDeviceKey();
 }

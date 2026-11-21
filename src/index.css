@@ -2716,3 +2716,341 @@ button {
     width: 100%;
   }
 }
+
+/* ---------- 云同步 / 班级身份 ---------- */
+
+.user-data-code-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red-bad);
+}
+
+.user-data-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-data-ghost-btn,
+.user-data-primary-btn,
+.user-data-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--plum-border);
+  background: var(--bg-cream);
+  color: var(--plum-deep);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-data-ghost-btn:hover,
+.user-data-link-btn:hover {
+  background: var(--plum-soft);
+}
+
+.user-data-ghost-btn:disabled,
+.user-data-link-btn:disabled,
+.user-data-sync-btn:disabled,
+.user-data-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.user-data-primary-btn {
+  border-color: var(--plum-deep);
+  background: var(--plum-deep);
+  color: #ffffff;
+}
+
+.user-data-primary-btn:hover {
+  background: var(--plum-mid);
+}
+
+.user-data-link-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.user-data-text-btn {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.user-data-text-btn:hover {
+  color: var(--plum-deep);
+}
+
+.user-data-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--plum-border);
+}
+
+.user-data-code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.user-data-code-row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.user-data-code-name {
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.user-data-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(37, 29, 58, 0.38);
+  backdrop-filter: blur(2px);
+}
+
+.user-data-modal {
+  width: min(420px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.user-data-modal h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.user-data-modal-tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.user-data-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---------- 班级看板 ---------- */
+
+.class-dashboard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(37, 29, 58, 0.36);
+  backdrop-filter: blur(2px);
+}
+
+.class-dashboard {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 71;
+  width: min(920px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.class-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.class-dashboard-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--plum-deep);
+}
+
+.class-dashboard-title h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.class-dashboard-count {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.class-dashboard-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.class-dashboard-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--plum-border);
+  background: var(--bg-cream);
+  color: var(--plum-deep);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.class-dashboard-refresh:hover {
+  background: var(--plum-soft);
+}
+
+.class-dashboard-hint,
+.class-dashboard-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+.class-dashboard-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--red-soft);
+  color: var(--red-bad);
+  font-size: 13px;
+}
+
+.class-dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.class-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--plum-soft);
+}
+
+.class-summary-card span {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.class-summary-card strong {
+  font-size: 20px;
+  color: var(--plum-deep);
+}
+
+.class-dashboard-table-wrap {
+  overflow-x: auto;
+}
+
+.class-dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.class-dashboard-table th,
+.class-dashboard-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--plum-border);
+  white-space: nowrap;
+}
+
+.class-dashboard-table th {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+.class-member-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.class-member-name em {
+  font-style: normal;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red-bad);
+}
+
+.class-member-revoked {
+  opacity: 0.55;
+}
+
+.class-member-revoke-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--plum-border);
+  background: var(--bg-cream);
+  color: var(--red-bad);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.class-member-revoke-btn:hover {
+  background: var(--red-soft);
+}
+
+.class-dashboard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.class-dashboard-revoke-space {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--red-bad);
+  background: var(--bg-surface);
+  color: var(--red-bad);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.class-dashboard-revoke-space:hover {
+  background: var(--red-soft);
+}

@@ -6,7 +6,15 @@ import { localBackend } from '../services/backend/local-backend';
 import { mergeProgressState, MAX_ATTEMPTS } from '../services/backend/merge';
 import { STATE_VERSION } from '../services/backend/types';
 import type { BackendState } from '../services/backend/types';
-import { currentUserKey, getSyncCode, setSyncCode } from '../services/backend/user-key';
+import { getOrCreateDeviceKey } from '../services/backend/user-key';
+import {
+  buildDeviceHash,
+  clearIdentity,
+  loadIdentity,
+  normalizeJoinCode,
+  saveIdentity,
+} from '../services/backend/space-client';
+import type { SpaceIdentity } from '../services/backend/space-client';
 import type { PhonemeProgress, QuizAttempt, UserProgressState } from '../types/phonics';
 
 const STORAGE_KEY = 'phonics-studio-progress-v1';
@@ -35,6 +43,12 @@ const EMPTY_PHONEME_PROGRESS: PhonemeProgress = {
 
 /** 推送到云端的防抖间隔（毫秒） */
 const PUSH_DEBOUNCE_MS = 1200;
+
+/** 身份相关操作的结果 */
+export interface IdentityActionResult {
+  ok: boolean;
+  message?: string;
+}
 
 /**
  * 获取本地当天的 YYYY-MM-DD 日期字符串
@@ -113,16 +127,19 @@ function isFavoriteIn(state: UserProgressState, phonemeId: string): boolean {
  *
  * 数据策略：本地优先 + 后台同步。
  * - 所有操作先落 localStorage，界面立刻响应；
- * - 接入云端后，启动时拉取并与本地合并，之后变更防抖推送；
- * - 未接入云端时不会发起任何网络请求，行为与原版完全一致。
+ * - 加入班级 / 创建个人空间之后，本地进度整份推上云端，换设备用恢复密钥拉回；
+ * - 未加入任何空间时不发起任何网络请求，行为与原版完全一致。
  */
 export function usePhonicsProgress() {
   const [progress, setProgress] = useState<UserProgressState>(loadInitialProgress);
+  const [identity, setIdentity] = useState<SpaceIdentity | null>(() => loadIdentity());
+  const [identityError, setIdentityError] = useState<string | null>(null);
+  const [identityBusy, setIdentityBusy] = useState<boolean>(false);
+  const [deviceKey] = useState<string>(() => getOrCreateDeviceKey());
   const [backendState, setBackendState] = useState<BackendState>(() =>
-    getBackend().isConfigured() ? 'connecting' : 'local',
+    getBackend().isConfigured() && loadIdentity() ? 'connecting' : 'local',
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [userKey, setUserKey] = useState<string>(() => currentUserKey());
 
   const progressRef = useRef<UserProgressState>(progress);
   const lastPushedRef = useRef<string>('');
@@ -270,43 +287,56 @@ export function usePhonicsProgress() {
   }, []);
 
   /**
-   * 把当前状态推送到云端
+   * 写入新的本机身份（加入班级 / 创建空间 / 恢复进度后调用）
    */
-  const pushToCloud = useCallback(async (state: UserProgressState): Promise<boolean> => {
-    const backend = getBackend();
-    if (!backend.isConfigured()) {
-      return false;
-    }
-    const serialized = JSON.stringify(state);
-    if (serialized === lastPushedRef.current) {
-      return true;
-    }
-    const payload = {
-      version: STATE_VERSION,
-      userKey: currentUserKey(),
-      state,
-      updatedAt: new Date().toISOString(),
-    };
-    try {
-      setBackendState('connecting');
-      await backend.save(payload);
-      await localBackend.save(payload);
-      lastPushedRef.current = serialized;
-      setLastSyncedAt(payload.updatedAt);
-      setBackendState('synced');
-      return true;
-    } catch {
-      setBackendState('error');
-      return false;
-    }
+  const applyIdentity = useCallback((next: SpaceIdentity) => {
+    saveIdentity(next);
+    // 身份变了，内容也要重新推一次，避免沿用上一次的「已推送」标记
+    lastPushedRef.current = '';
+    setIdentity(next);
   }, []);
+
+  /**
+   * 把当前状态推送到云端（没有身份 = 纯本机，不推送）
+   */
+  const pushToCloud = useCallback(
+    async (state: UserProgressState): Promise<boolean> => {
+      const backend = getBackend();
+      if (!backend.isConfigured() || !identity) {
+        return false;
+      }
+      const serialized = JSON.stringify(state);
+      if (serialized === lastPushedRef.current) {
+        return true;
+      }
+      const payload = {
+        version: STATE_VERSION,
+        userKey: identity.memberId,
+        state,
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        setBackendState('connecting');
+        await backend.save(payload);
+        await localBackend.save(payload);
+        lastPushedRef.current = serialized;
+        setLastSyncedAt(payload.updatedAt);
+        setBackendState('synced');
+        return true;
+      } catch {
+        setBackendState('error');
+        return false;
+      }
+    },
+    [identity],
+  );
 
   /**
    * 手动触发一次同步（拉取 + 合并 + 推送）
    */
   const syncNow = useCallback(async () => {
     const backend = getBackend();
-    if (!backend.isConfigured()) {
+    if (!backend.isConfigured() || !identity) {
       setBackendState('local');
       return;
     }
@@ -320,10 +350,11 @@ export function usePhonicsProgress() {
       if (!ok) {
         setBackendState('offline');
       }
-    } catch {
+    } catch (error) {
       setBackendState('offline');
+      setIdentityError(error instanceof Error ? error.message : '云端连不上，先用本机数据');
     }
-  }, [pushToCloud]);
+  }, [identity, pushToCloud]);
 
   /**
    * 启动时拉取并合并；后续变更防抖推送
@@ -332,8 +363,8 @@ export function usePhonicsProgress() {
     let cancelled = false;
     const backend = getBackend();
 
-    if (!backend.isConfigured()) {
-      // 未配置远端：保持纯本地，不发起任何网络请求
+    if (!backend.isConfigured() || !identity) {
+      // 未配置远端或尚未加入空间：保持纯本地，不发起任何网络请求
       hydratedRef.current = true;
       return () => {
         cancelled = true;
@@ -357,9 +388,10 @@ export function usePhonicsProgress() {
         if (!cancelled) {
           hydratedRef.current = true;
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           setBackendState('offline');
+          setIdentityError(error instanceof Error ? error.message : '云端连不上，先用本机数据');
           hydratedRef.current = true;
         }
       }
@@ -368,7 +400,7 @@ export function usePhonicsProgress() {
     return () => {
       cancelled = true;
     };
-  }, [userKey, pushToCloud]);
+  }, [identity, pushToCloud]);
 
   /**
    * 状态变化后防抖推送
@@ -378,22 +410,184 @@ export function usePhonicsProgress() {
       return;
     }
     const backend = getBackend();
-    if (!backend.isConfigured()) {
+    if (!backend.isConfigured() || !identity) {
       return;
     }
     const timer = setTimeout(() => {
       void pushToCloud(progress);
     }, PUSH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [progress, pushToCloud]);
+  }, [progress, identity, pushToCloud]);
 
   /**
-   * 设置 / 修改同步码：同一串同步码在不同设备上共享同一份云端数据
+   * 用班级码加入班级
    */
-  const applySyncCode = useCallback((code: string) => {
-    setSyncCode(code);
+  const joinClass = useCallback(
+    async (rawCode: string): Promise<IdentityActionResult> => {
+      const backend = getBackend();
+      if (!backend.joinSpace) {
+        return { ok: false, message: '当前后端不支持班级功能' };
+      }
+      const joinCode = normalizeJoinCode(rawCode);
+      setIdentityBusy(true);
+      setIdentityError(null);
+      try {
+        const deviceHash = await buildDeviceHash(deviceKey);
+        const result = await backend.joinSpace({ joinCode, deviceHash });
+        applyIdentity({
+          spaceId: result.spaceId,
+          spaceName: result.spaceName,
+          kind: result.kind,
+          role: result.role,
+          memberId: result.memberId,
+          recoveryKey: result.recoveryKey,
+          joinCode,
+          deviceHash,
+          joinedAt: new Date().toISOString(),
+        });
+        return { ok: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '加入班级失败';
+        setIdentityError(message);
+        return { ok: false, message };
+      } finally {
+        setIdentityBusy(false);
+      }
+    },
+    [applyIdentity, deviceKey],
+  );
+
+  /**
+   * 用恢复密钥找回自己的进度（换设备）
+   */
+  const recoverProgress = useCallback(
+    async (recoveryKey: string): Promise<IdentityActionResult> => {
+      const backend = getBackend();
+      if (!backend.recoverMember) {
+        return { ok: false, message: '当前后端不支持恢复功能' };
+      }
+      setIdentityBusy(true);
+      setIdentityError(null);
+      try {
+        const deviceHash = await buildDeviceHash(deviceKey);
+        const result = await backend.recoverMember({ recoveryKey: recoveryKey.trim(), deviceHash });
+        applyIdentity({
+          spaceId: result.spaceId,
+          spaceName: result.spaceName,
+          kind: result.kind,
+          role: result.role,
+          memberId: result.memberId,
+          recoveryKey: recoveryKey.trim(),
+          deviceHash,
+          joinedAt: new Date().toISOString(),
+        });
+        // 云端已有进度立刻合并进本地，界面马上能看到
+        if (result.state) {
+          const merged = mergeProgressState(progressRef.current, result.state);
+          progressRef.current = merged;
+          setProgress(merged);
+        }
+        return { ok: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '恢复进度失败';
+        setIdentityError(message);
+        return { ok: false, message };
+      } finally {
+        setIdentityBusy(false);
+      }
+    },
+    [applyIdentity, deviceKey],
+  );
+
+  /**
+   * 创建班级（老师）：拿到班级码 + 管理码
+   */
+  const createClass = useCallback(
+    async (name: string): Promise<IdentityActionResult> => {
+      const backend = getBackend();
+      if (!backend.createSpace) {
+        return { ok: false, message: '当前后端不支持班级功能' };
+      }
+      setIdentityBusy(true);
+      setIdentityError(null);
+      try {
+        const deviceHash = await buildDeviceHash(deviceKey);
+        const result = await backend.createSpace({
+          kind: 'class',
+          name: name.trim(),
+          deviceHash,
+        });
+        applyIdentity({
+          spaceId: result.spaceId,
+          spaceName: result.spaceName,
+          kind: result.kind,
+          role: result.role,
+          memberId: result.memberId,
+          recoveryKey: result.recoveryKey,
+          ownerKey: result.ownerKey,
+          joinCode: result.joinCode,
+          deviceHash,
+          joinedAt: new Date().toISOString(),
+        });
+        return { ok: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '创建班级失败';
+        setIdentityError(message);
+        return { ok: false, message };
+      } finally {
+        setIdentityBusy(false);
+      }
+    },
+    [applyIdentity, deviceKey],
+  );
+
+  /**
+   * 创建个人空间：本地进度整份上云，换设备用恢复密钥拉回
+   */
+  const createPersonalSpace = useCallback(async (): Promise<IdentityActionResult> => {
+    const backend = getBackend();
+    if (!backend.createSpace) {
+      return { ok: false, message: '当前后端不支持云端身份' };
+    }
+    setIdentityBusy(true);
+    setIdentityError(null);
+    try {
+      const deviceHash = await buildDeviceHash(deviceKey);
+      const result = await backend.createSpace({
+        kind: 'personal',
+        name: '我的个人空间',
+        deviceHash,
+      });
+      applyIdentity({
+        spaceId: result.spaceId,
+        spaceName: result.spaceName,
+        kind: result.kind,
+        role: result.role,
+        memberId: result.memberId,
+        recoveryKey: result.recoveryKey,
+        ownerKey: result.ownerKey,
+        deviceHash,
+        joinedAt: new Date().toISOString(),
+      });
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '创建个人空间失败';
+      setIdentityError(message);
+      return { ok: false, message };
+    } finally {
+      setIdentityBusy(false);
+    }
+  }, [applyIdentity, deviceKey]);
+
+  /**
+   * 退出当前空间，回到纯本机模式（云端数据保留）
+   */
+  const leaveSpace = useCallback(() => {
+    clearIdentity();
     lastPushedRef.current = '';
-    setUserKey(currentUserKey());
+    setIdentity(null);
+    setIdentityError(null);
+    setBackendState('local');
   }, []);
 
   const summary = useMemo(() => {
@@ -428,7 +622,9 @@ export function usePhonicsProgress() {
     backendState,
     lastSyncedAt,
     favoriteIds,
-    syncCode: getSyncCode(),
+    identity,
+    identityError,
+    identityBusy,
     getPhonemeProgress,
     setRepresentativeWord,
     toggleCompleted,
@@ -437,6 +633,10 @@ export function usePhonicsProgress() {
     isFavorite,
     resetAllProgress,
     syncNow,
-    applySyncCode,
+    joinClass,
+    recoverProgress,
+    createClass,
+    createPersonalSpace,
+    leaveSpace,
   };
 }
