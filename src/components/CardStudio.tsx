@@ -18,7 +18,8 @@ import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import type { PhonemeItem, PhonemeProgress } from '../types/phonics';
 import type { PronunciationComparisonResult } from '../utils/pronunciation-analyzer';
-import { playSelectWordSfx } from '../utils/sound-effects';
+import { resumeSharedAudioContext } from '../utils/audio-context';
+import { playScoreCelebrateSfx, playSelectWordSfx } from '../utils/sound-effects';
 import { PhonemeSidebar, type ProgressFilter } from './PhonemeSidebar';
 
 interface CardStudioProps {
@@ -65,9 +66,14 @@ export function CardStudio({
   const [isVideoPlaying, setIsVideoPlaying] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<PronunciationComparisonResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [cardPulse, setCardPulse] = useState(false);
+  const [namedFlash, setNamedFlash] = useState(false);
+  const [scoreCelebrate, setScoreCelebrate] = useState(false);
+  const [showCustomName, setShowCustomName] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const speakTimerRef = useRef<number | null>(null);
+  const celebratedScoreKeyRef = useRef<string | null>(null);
   const { playingId, speakingWord, pendingKey, playPhonemeAudio, speakWord, preloadWords, preloadUrls } =
     useAudioPlayer();
   const recorder = useVoiceRecorder(currentPhonemeId);
@@ -123,6 +129,11 @@ export function CardStudio({
     setIsAnalyzing(false);
     setCustomWordInput('');
     setIsVideoPlaying(false);
+    setCardPulse(false);
+    setNamedFlash(false);
+    setScoreCelebrate(false);
+    setShowCustomName(false);
+    celebratedScoreKeyRef.current = null;
     preloadUrls([currentPhoneme.localAudioSrc]);
     preloadWords(currentPhoneme.cardWords);
     return () => {
@@ -173,6 +184,34 @@ export function CardStudio({
       cancelled = true;
     };
   }, [currentPhoneme.id, currentPhoneme.localAudioSrc, recorder.recordedBlob, recorder.trimInfo]);
+
+  // 跟读高分庆祝：只在「刚录完」时播，切音标恢复旧录音不播（否则会和下一个音标叠音）
+  useEffect(() => {
+    if (recorder.commitSource !== 'user') {
+      return;
+    }
+    if (!analysisResult || analysisResult.status !== 'ok') {
+      return;
+    }
+    if (analysisResult.overallScore < 76) {
+      return;
+    }
+    const key = `${currentPhoneme.id}:${analysisResult.overallScore}:${recorder.recordedUrl ?? ''}`;
+    if (celebratedScoreKeyRef.current === key) {
+      return;
+    }
+    celebratedScoreKeyRef.current = key;
+    setScoreCelebrate(true);
+    // 停录时已在手势里 resume 过共享 context；这里直接播庆祝音
+    playScoreCelebrateSfx();
+    const timer = window.setTimeout(() => setScoreCelebrate(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [
+    analysisResult,
+    currentPhoneme.id,
+    recorder.commitSource,
+    recorder.recordedUrl,
+  ]);
 
   // 同步视频倍速
   useEffect(() => {
@@ -226,9 +265,23 @@ export function CardStudio({
     }
   };
 
+  const pulseCard = () => {
+    setCardPulse(true);
+    window.setTimeout(() => setCardPulse(false), 220);
+  };
+
+  const handlePlayPhonemeFromCard = () => {
+    // 只留卡片弹效；真人标准音本身就是反馈，再叠 tap 会和发音抢耳
+    pulseCard();
+    playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id);
+  };
+
   const handleSelectRepresentativeChip = (word: string) => {
+    void resumeSharedAudioContext();
     playSelectWordSfx();
     onSetRepresentativeWord(currentPhoneme.id, word);
+    setNamedFlash(true);
+    window.setTimeout(() => setNamedFlash(false), 700);
     if (speakTimerRef.current !== null) {
       window.clearTimeout(speakTimerRef.current);
     }
@@ -246,7 +299,10 @@ export function CardStudio({
     }
     playSelectWordSfx();
     onSetRepresentativeWord(currentPhoneme.id, trimmed);
+    setNamedFlash(true);
+    window.setTimeout(() => setNamedFlash(false), 700);
     setCustomWordInput('');
+    setShowCustomName(false);
   };
 
   const isPlayingCurrentAudio = playingId === currentPhoneme.id;
@@ -339,15 +395,15 @@ export function CardStudio({
 
         {/* 双栏主学习区 */}
         <div className="studio-grid">
-          {/* 左栏：手绘插画卡片 + 代表词与打星互动 */}
+          {/* 左栏：手绘卡片 → 跟读模仿 → 代号词（可选） */}
           <section className="card-stage-panel">
             <div className="illustrated-card-frame">
-              <div className="illustrated-card-inner">
+              <div className={`illustrated-card-inner ${cardPulse ? 'tap-bounce' : ''}`}>
                 <img
                   src={currentPhoneme.cardSrc}
                   alt={`音标 ${currentPhoneme.symbol} 手绘卡片`}
                   className="illustrated-card-img"
-                  onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
+                  onClick={handlePlayPhonemeFromCard}
                   title="点击卡片空白/顶部区域听音标发音"
                 />
 
@@ -360,7 +416,9 @@ export function CardStudio({
                       type="button"
                       className={`card-word-hotspot ${isSpeakingCardWord ? 'speaking' : ''} ${isPendingCardWord ? 'pending' : ''}`}
                       style={{ left: CARD_HOTSPOT_LEFT_POSITIONS[index] }}
-                      onClick={() => speakWord(word)}
+                      onClick={() => {
+                        speakWord(word);
+                      }}
                       title={`点击朗读单词 ${word}`}
                       aria-label={`朗读卡片单词 ${CARD_OPTION_LETTERS[index]} ${word}`}
                     >
@@ -377,7 +435,7 @@ export function CardStudio({
                 <button
                   type="button"
                   className={`card-audio-hint ${isPlayingCurrentAudio ? 'active' : ''}`}
-                  onClick={() => playPhonemeAudio(currentPhoneme.localAudioSrc, currentPhoneme.id)}
+                  onClick={handlePlayPhonemeFromCard}
                 >
                   <Volume2 size={15} />
                   <span>{isPlayingCurrentAudio ? '发音中...' : '点击卡片听音标'}</span>
@@ -385,81 +443,11 @@ export function CardStudio({
               </div>
             </div>
 
-            {/* 互动小练习：对应卡片上的“我的代表词”与今日已学打卡 */}
-            <div className="card-homework-box">
-              <div className="homework-row">
-                <div className="homework-label-row">
-                  <span className="homework-title">谁来代表这个音？我的代表词（点击试听并选择）</span>
-                  <div className="homework-status-actions">
-                    {currentProgress.representativeWord && (
-                      <span className="selected-rep-badge">
-                        已选：{currentProgress.representativeWord}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className={`complete-toggle-btn ${currentProgress.completed ? 'done' : ''}`}
-                      onClick={() => onToggleCompleted(currentPhoneme.id)}
-                    >
-                      <CheckCircle2 size={16} />
-                      <span>{currentProgress.completed ? '今日已学' : '标记已学'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rep-choice-chips">
-                  {currentPhoneme.cardWords.map((word, index) => {
-                    const isSelected = currentProgress.representativeWord === word;
-                    const isSpeaking = speakingWord === word;
-                    return (
-                      <button
-                        key={word}
-                        type="button"
-                        className={`rep-chip ${isSelected ? 'active' : ''} ${
-                          isSpeaking ? 'speaking' : ''
-                        }`}
-                        onClick={() => handleSelectRepresentativeChip(word)}
-                        title={`设为代表词并朗读 ${word}`}
-                      >
-                        <Volume2 size={13} />
-                        <span>
-                          {CARD_OPTION_LETTERS[index]}. {word}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="custom-word-row">
-                  <input
-                    type="text"
-                    className="custom-word-input"
-                    placeholder="或自己写一个最顺口的代表词（如 tea）"
-                    value={customWordInput}
-                    onChange={(event) => setCustomWordInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        handleSaveCustomWord();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="save-word-btn"
-                    onClick={handleSaveCustomWord}
-                    disabled={!customWordInput.trim()}
-                  >
-                    设为代表词
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 放在中间“我的代表词”下方：跟读录音与匹配度对比 */}
+            {/* 听完标准音立刻跟读：录音与匹配度对比 */}
             <div className="lab-card recorder-center-card">
               <div className="lab-card-header">
-                <h3>跟读录音与匹配度对比</h3>
-                <span className="subtle-hint">录音自动保存在本机，切换音标或刷新页面都不会丢失</span>
+                <h3>听完就跟读</h3>
+                <span className="subtle-hint">先听标准音，马上模仿录音；录音保存在本机，切换音标也不会丢</span>
               </div>
 
               <div className="recorder-actions">
@@ -476,7 +464,10 @@ export function CardStudio({
                   <button
                     type="button"
                     className="record-btn recording"
-                    onClick={recorder.stopRecording}
+                    onClick={() => {
+                      void resumeSharedAudioContext();
+                      recorder.stopRecording();
+                    }}
                   >
                     <Square size={15} fill="currentColor" />
                     <span>点击停止录音...</span>
@@ -546,7 +537,7 @@ export function CardStudio({
               )}
 
               {!isAnalyzing && analysisResult && (
-                <div className="match-result-panel">
+                <div className={`match-result-panel ${scoreCelebrate ? 'score-celebrate' : ''}`}>
                   <div className="match-score-row">
                     <div
                       className={`match-score-badge ${
@@ -557,7 +548,7 @@ export function CardStudio({
                             : analysisResult.overallScore >= 60
                               ? 'mid'
                               : 'low'
-                      }`}
+                      } ${scoreCelebrate ? 'score-pop' : ''}`}
                     >
                       <span className="score-number">
                         {analysisResult.status === 'too-quiet'
@@ -651,6 +642,102 @@ export function CardStudio({
                 </div>
               )}
             </div>
+            {/* 代号词：可选记忆锚点，不挡主流程 */}
+            <div className={`card-homework-box codename-box ${namedFlash ? 'named-flash' : ''}`}>
+              <div className="homework-row">
+                <div className="homework-label-row">
+                  <div className="codename-title-block">
+                    <span className="homework-title">给这个音起个代号（可选）</span>
+                    <span className="codename-hint">记住一个词，以后看到音标就想起它</span>
+                  </div>
+                  <div className="homework-status-actions">
+                    {currentProgress.representativeWord && (
+                      <span className="selected-rep-badge codename-live">
+                        代号：{currentProgress.representativeWord}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={`complete-toggle-btn ${currentProgress.completed ? 'done' : ''}`}
+                      onClick={() => onToggleCompleted(currentPhoneme.id)}
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>{currentProgress.completed ? '今日已学' : '标记已学'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rep-choice-chips">
+                  {currentPhoneme.cardWords.map((word, index) => {
+                    const isSelected = currentProgress.representativeWord === word;
+                    const isSpeaking = speakingWord === word;
+                    const isSuggested =
+                      !currentProgress.representativeWord && index === 0;
+                    return (
+                      <button
+                        key={word}
+                        type="button"
+                        className={`rep-chip ${isSelected ? 'active' : ''} ${
+                          isSpeaking ? 'speaking' : ''
+                        } ${isSuggested ? 'suggested' : ''}`}
+                        onClick={() => handleSelectRepresentativeChip(word)}
+                        title={
+                          isSuggested
+                            ? `推荐代号 ${word}（点一下就记住）`
+                            : `设为代号并朗读 ${word}`
+                        }
+                      >
+                        <Volume2 size={13} />
+                        <span>
+                          {CARD_OPTION_LETTERS[index]}. {word}
+                          {isSuggested ? ' · 推荐' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {namedFlash && currentProgress.representativeWord && (
+                  <p className="codename-toast" role="status">
+                    好，以后 {currentPhoneme.symbol} 就是「{currentProgress.representativeWord}」
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="codename-custom-toggle"
+                  onClick={() => setShowCustomName((prev) => !prev)}
+                >
+                  {showCustomName ? '收起自己写' : '自己写一个代号'}
+                </button>
+
+                {showCustomName && (
+                  <div className="custom-word-row">
+                    <input
+                      type="text"
+                      className="custom-word-input"
+                      placeholder="写一个最顺口的词（如 tea）"
+                      value={customWordInput}
+                      onChange={(event) => setCustomWordInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          handleSaveCustomWord();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="save-word-btn"
+                      onClick={handleSaveCustomWord}
+                      disabled={!customWordInput.trim()}
+                    >
+                      记住它
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </section>
 
           {/* 右栏：口型演示视频 + 发音要领 */}

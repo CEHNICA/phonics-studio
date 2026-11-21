@@ -221,6 +221,17 @@ VITE_BACKEND_URL=https://phonics-studio-api.pages.dev
 
 `scripts/check-cards-perf.ts`（`npm run check:cards`，10 项断言）会**真读 WebP 文件头**解析像素尺寸来验同比例与不超采样，涉及卡片素材或引用路径时必跑。
 
+## 交互动效与可访问性
+
+学习页有一批交互动效（卡片弹跳、跟读高分庆祝、连击爆发、选项抖动、结算入场），两条约束：
+
+- **没有 `infinite` 无限动画**。连击徽章的脉冲改成 `animation: combo-pulse 0.9s ease 3`（播 3 次就停）—— 徽章一直挂在顶栏，无限重绘会持续吃移动端 GPU。
+- **尊重系统的「减弱动态效果」**。`src/index.css` 末尾有 `prefers-reduced-motion: reduce` 降级块：所有动画类 `animation: none`，`forwards` 终态的连击爆发层额外 `display: none`（只关动画会让「×3 连击！」永远留在屏幕正中央）。
+
+`scripts/check-motion.ts`（`npm run check:motion`，4 项断言）逐条守住；改任何动效后必跑。
+
+**怎么验不是只看 CSS**（工作区 `破甲\_tools\motion_reduced_verify.js`）：用 Playwright 的 `emulateMedia({ reducedMotion: 'reduce' })` 让浏览器真的按减弱动效渲染，然后读 computed style —— reduce 下 `animation-name` 必须是 `none`，normal 下必须是动画名（对照组证明判据没永远绿），爆发层 `display` 必须是 `none`。
+
 ## 首屏加载性能
 
 **这条是本项目对国内网络最关键的一条。** 素材托管在阿里云 OSS + CDN 上，实测发现：

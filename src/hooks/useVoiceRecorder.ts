@@ -8,6 +8,9 @@ export interface VoiceTrimInfo {
   hasSpeech: boolean;
 }
 
+/** 当前录音从哪来：user=刚录完；restore=切换音标后从本机恢复（不该再播庆祝音） */
+export type RecordingCommitSource = 'user' | 'restore' | null;
+
 export interface VoiceRecorderState {
   isRecording: boolean;
   isPlayingRecording: boolean;
@@ -16,6 +19,8 @@ export interface VoiceRecorderState {
   recordedUrl: string | null;
   recordedBlob: Blob | null;
   trimInfo: VoiceTrimInfo | null;
+  /** 最近一次写入录音的来源；切音标恢复时为 restore */
+  commitSource: RecordingCommitSource;
   errorMessage: string | null;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
@@ -47,6 +52,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [trimInfo, setTrimInfo] = useState<VoiceTrimInfo | null>(null);
+  const [commitSource, setCommitSource] = useState<RecordingCommitSource>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const stopStream = useCallback(() => {
@@ -86,6 +92,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
     });
     setRecordedBlob(null);
     setTrimInfo(null);
+    setCommitSource(null);
     setErrorMessage(null);
   }, [stopPlayback]);
 
@@ -117,6 +124,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
       }
       setRecordedBlob(stored.blob);
       setTrimInfo(stored.trimInfo);
+      setCommitSource('restore');
       setRecordedUrl((prev) => {
         if (prev) {
           URL.revokeObjectURL(prev);
@@ -216,6 +224,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
             const url = URL.createObjectURL(result.blob);
             setRecordedBlob(result.blob);
             setTrimInfo(nextTrimInfo);
+            setCommitSource('user');
             setRecordedUrl((prev) => {
               if (prev) {
                 URL.revokeObjectURL(prev);
@@ -233,6 +242,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
             const url = URL.createObjectURL(rawBlob);
             setRecordedBlob(rawBlob);
             setTrimInfo({ leadingTrimmedSec: 0, trailingTrimmedSec: 0, hasSpeech: true });
+            setCommitSource('user');
             setRecordedUrl((prev) => {
               if (prev) {
                 URL.revokeObjectURL(prev);
@@ -345,6 +355,7 @@ export function useVoiceRecorder(storageKey: string): VoiceRecorderState {
     recordedUrl,
     recordedBlob,
     trimInfo,
+    commitSource,
     errorMessage,
     startRecording,
     stopRecording,

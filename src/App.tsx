@@ -236,6 +236,7 @@ export function App() {
           <ListeningQuiz
             quizStats={progress.quizStats}
             weakPhonemeIds={weakPhonemeIds}
+            getPhonemeProgress={getPhonemeProgress}
             onRecordAttempt={recordQuizAttempt}
             onJumpToStudio={handleOpenInStudio}
           />

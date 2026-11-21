@@ -15,8 +15,20 @@ import {
 } from 'lucide-react';
 import { CONFUSABLE_PAIRS, PHONEME_MAP, PHONEMES } from '../data/phonics-catalog';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
-import type { ConfusablePair, PhonemeExample, PhonemeItem, QuizStats } from '../types/phonics';
-import { playCorrectSfx, playRoundFinishSfx, playWrongSfx } from '../utils/sound-effects';
+import type {
+  ConfusablePair,
+  PhonemeExample,
+  PhonemeItem,
+  PhonemeProgress,
+  QuizStats,
+} from '../types/phonics';
+import { resumeSharedAudioContext } from '../utils/audio-context';
+import {
+  playComboSfx,
+  playCorrectSfx,
+  playRoundFinishSfx,
+  playWrongSfx,
+} from '../utils/sound-effects';
 
 type QuizMode = 'listen-card' | 'confusable' | 'word-phoneme' | 'ipa-word';
 
@@ -49,6 +61,7 @@ interface RoundAttempt {
 interface ListeningQuizProps {
   quizStats: QuizStats;
   weakPhonemeIds: string[];
+  getPhonemeProgress?: (phonemeId: string) => PhonemeProgress;
   onRecordAttempt: (phonemeId: string, isCorrect: boolean, currentCombo: number) => void;
   onJumpToStudio: (phonemeId: string) => void;
 }
@@ -268,6 +281,7 @@ export function ListeningQuiz({
   quizStats,
   weakPhonemeIds,
   onRecordAttempt,
+  getPhonemeProgress,
   onJumpToStudio,
 }: ListeningQuizProps) {
   const [mode, setMode] = useState<QuizMode>('listen-card');
@@ -282,6 +296,8 @@ export function ListeningQuiz({
   const [attempts, setAttempts] = useState<RoundAttempt[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [combo, setCombo] = useState<number>(0);
+  const [roundBestCombo, setRoundBestCombo] = useState<number>(0);
+  const [comboBurst, setComboBurst] = useState<number | null>(null);
   const [roundFinished, setRoundFinished] = useState<boolean>(false);
 
   const { playingId, speakingWord, playPhonemeAudio, speakWord, preloadUrls, preloadWords } =
@@ -307,6 +323,8 @@ export function ListeningQuiz({
       setAttempts([]);
       setSelectedKey(null);
       setCombo(0);
+      setRoundBestCombo(0);
+      setComboBurst(null);
       setRoundFinished(false);
       setShowWordSpellingHint(false);
     },
@@ -379,6 +397,9 @@ export function ListeningQuiz({
       const isCorrect = optionKey === currentQuestion.correctKey;
       const nextCombo = isCorrect ? combo + 1 : 0;
       setCombo(nextCombo);
+      if (nextCombo > 0) {
+        setRoundBestCombo((prev) => Math.max(prev, nextCombo));
+      }
       setAttempts((prev) => [
         ...prev,
         { question: currentQuestion, isCorrect, chosenKey: optionKey },
@@ -386,8 +407,16 @@ export function ListeningQuiz({
       onRecordAttempt(currentQuestion.targetPhoneme.id, isCorrect, nextCombo);
 
       if (sfxEnabled) {
+        void resumeSharedAudioContext();
         if (isCorrect) {
-          playCorrectSfx();
+          // 连击里程碑只播升温音，避免和「答对叮咚」叠成一团
+          if (nextCombo === 3 || nextCombo === 5 || nextCombo === 8) {
+            playComboSfx(nextCombo);
+            setComboBurst(nextCombo);
+            window.setTimeout(() => setComboBurst(null), 900);
+          } else {
+            playCorrectSfx();
+          }
         } else {
           playWrongSfx();
         }
@@ -554,7 +583,7 @@ export function ListeningQuiz({
       </div>
 
       {roundFinished ? (
-        <div className="quiz-result-card">
+        <div className="quiz-result-card result-settle-in">
           <div className="rank-medal-badge">
             <Award size={30} />
             <span>{rankInfo.grade}</span>
@@ -563,6 +592,13 @@ export function ListeningQuiz({
           <p className="result-score-line">
             本轮答对 <strong>{roundScore}</strong> / {questions.length} 题
           </p>
+          <div className="result-combo-line">
+            <Flame size={16} />
+            <span>
+              本轮最高连击 <strong>{roundBestCombo}</strong>
+              {roundBestCombo >= 5 ? ' · 手感火热' : roundBestCombo >= 3 ? ' · 不错哦' : ''}
+            </span>
+          </div>
           <p className="result-encouragement">{rankInfo.message}</p>
 
           {wrongAttempts.length > 0 && (
@@ -608,6 +644,14 @@ export function ListeningQuiz({
           )}
 
           <div className="result-action-row">
+            <button
+              type="button"
+              className="primary-audio-btn play-again-btn"
+              onClick={() => startNewRound(mode, weakOnly)}
+            >
+              <RefreshCw size={16} />
+              <span>再来一把！{DEFAULT_ROUND_SIZE} 题</span>
+            </button>
             {wrongAttempts.length > 0 && (
               <button
                 type="button"
@@ -623,18 +667,16 @@ export function ListeningQuiz({
                 <span>专刷本轮错题 ({wrongAttempts.length} 题)</span>
               </button>
             )}
-            <button
-              type="button"
-              className="primary-audio-btn"
-              onClick={() => startNewRound(mode, weakOnly)}
-            >
-              <RefreshCw size={16} />
-              <span>再来一轮 {DEFAULT_ROUND_SIZE} 题</span>
-            </button>
           </div>
         </div>
       ) : (
         <div className="quiz-stage-card">
+          {comboBurst !== null && (
+            <div className="combo-burst-overlay" aria-hidden="true">
+              <span className="combo-burst-text">×{comboBurst} 连击！</span>
+            </div>
+          )}
+
           {/* 10题进度点条 + 连击徽章 */}
           <div className="quiz-stage-top">
             <div className="round-progress-group">
@@ -655,9 +697,15 @@ export function ListeningQuiz({
               </div>
             </div>
 
-            <span className={`combo-badge ${combo >= 3 ? 'hot' : ''}`}>
+            <span className={`combo-badge ${combo >= 3 ? 'hot' : ''} ${combo >= 5 ? 'blaze' : ''}`}>
               <Flame size={15} />
-              <span>{combo >= 3 ? `超棒！${combo} 连击` : `当前连对：${combo}`}</span>
+              <span>
+                {combo >= 5
+                  ? `燃烧！${combo} 连击`
+                  : combo >= 3
+                    ? `超棒！${combo} 连击`
+                    : `当前连对：${combo}`}
+              </span>
             </span>
           </div>
 
@@ -730,7 +778,9 @@ export function ListeningQuiz({
                   key={option.key}
                   type="button"
                   disabled={isAnswered}
-                  className={`quiz-option-card ${stateClass}`}
+                  className={`quiz-option-card ${stateClass} ${
+                    isAnswered && isCorrectOption ? 'option-pop' : ''
+                  } ${isAnswered && isSelected && !isCorrectOption ? 'option-shake' : ''}`}
                   onClick={() => handleChooseOption(option.key)}
                 >
                   <span className="option-hotkey">{idx + 1}</span>
@@ -834,8 +884,29 @@ export function ListeningQuiz({
                 />
                 <div className="feedback-detail-text">
                   <p className="feedback-explain">{currentQuestion.explanation}</p>
+                  {(() => {
+                    const myCode =
+                      getPhonemeProgress?.(currentQuestion.targetPhoneme.id)
+                        ?.representativeWord ?? '';
+                    if (!myCode) {
+                      return null;
+                    }
+                    return (
+                      <p className="feedback-codename">
+                        你的代号词：<strong>{myCode}</strong>
+                        <button
+                          type="button"
+                          className="mini-speak-word-btn"
+                          onClick={() => speakWord(myCode)}
+                        >
+                          <Volume2 size={12} />
+                          <span>听一下</span>
+                        </button>
+                      </p>
+                    );
+                  })()}
                   <div className="feedback-card-words">
-                    <span>卡片代表词：</span>
+                    <span>卡片词：</span>
                     {currentQuestion.targetPhoneme.cardWords.map((word) => (
                       <button
                         key={word}

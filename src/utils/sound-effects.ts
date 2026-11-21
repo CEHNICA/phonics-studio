@@ -1,26 +1,39 @@
 /**
- * 使用浏览器 Web Audio API 合成轻量级答题提示音效，无需额外音频文件
+ * 使用浏览器 Web Audio API 合成轻量级答题提示音效，无需额外音频文件。
+ * 与录音分析共用 `audio-context.ts` 的 AudioContext，避免一套 suspended、另一套在响。
  */
 
-let sharedAudioContext: AudioContext | null = null;
+import { getSharedAudioContext } from './audio-context';
 
-function getAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') {
-    return null;
+type ActiveVoice = { osc: OscillatorNode; gain: GainNode };
+
+let activeVoices: ActiveVoice[] = [];
+
+/**
+ * 柔和掐掉尚未播完的提示音（不碰 HTMLAudio 真人发音）
+ */
+export function stopSfx(): void {
+  if (activeVoices.length === 0) {
+    return;
   }
-  const AudioCtx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) {
-    return null;
+  let now = 0;
+  try {
+    now = getSharedAudioContext().currentTime;
+  } catch {
+    activeVoices = [];
+    return;
   }
-  if (!sharedAudioContext) {
-    sharedAudioContext = new AudioCtx();
+  for (const voice of activeVoices) {
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value, 0.0001), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+      voice.osc.stop(now + 0.04);
+    } catch {
+      // 已结束的节点忽略
+    }
   }
-  if (sharedAudioContext.state === 'suspended') {
-    void sharedAudioContext.resume();
-  }
-  return sharedAudioContext;
+  activeVoices = [];
 }
 
 /**
@@ -31,11 +44,16 @@ function playToneSequence(
   peakGain = 0.11,
 ) {
   try {
-    const ctx = getAudioContext();
-    if (!ctx) {
-      return;
+    const ctx = getSharedAudioContext();
+    // 必须在用户手势调用栈里触发 resume；这里同步发起即可
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
     }
+
+    stopSfx();
+
     const now = ctx.currentTime;
+    const spawned: ActiveVoice[] = [];
 
     for (const note of notes) {
       const osc = ctx.createOscillator();
@@ -43,15 +61,22 @@ function playToneSequence(
       osc.type = note.type ?? 'sine';
       osc.frequency.setValueAtTime(note.freq, now + note.delay);
 
-      gain.gain.setValueAtTime(0.001, now + note.delay);
-      gain.gain.exponentialRampToValueAtTime(peakGain, now + note.delay + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + note.delay + note.duration);
+      const startAt = now + note.delay;
+      const peakAt = startAt + 0.015;
+      const endAt = startAt + Math.max(note.duration, 0.04);
+
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(peakGain, peakAt);
+      gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.start(now + note.delay);
-      osc.stop(now + note.delay + note.duration + 0.02);
+      osc.start(startAt);
+      osc.stop(endAt + 0.02);
+      spawned.push({ osc, gain });
     }
+
+    activeVoices = spawned;
   } catch {
     // 忽略浏览器音频上下文限制错误
   }
@@ -98,5 +123,42 @@ export function playSelectWordSfx(): void {
       { freq: 880.0, delay: 0.04, duration: 0.09 }, // A5
     ],
     0.075,
+  );
+}
+
+/**
+ * 点击卡片 / 热区时的极短敲击感（不抢发音）
+ */
+export function playTapSfx(): void {
+  playToneSequence([{ freq: 740.0, delay: 0, duration: 0.04, type: 'triangle' }], 0.045);
+}
+
+/**
+ * 跟读高分庆祝（明显高于答题叮咚，但别太吵）
+ */
+export function playScoreCelebrateSfx(): void {
+  playToneSequence(
+    [
+      { freq: 523.25, delay: 0, duration: 0.1 },
+      { freq: 659.25, delay: 0.08, duration: 0.1 },
+      { freq: 783.99, delay: 0.16, duration: 0.12 },
+      { freq: 1046.5, delay: 0.26, duration: 0.22 },
+    ],
+    0.1,
+  );
+}
+
+/**
+ * 连击升温提示（3 / 5 / 8 连时触发）
+ */
+export function playComboSfx(combo: number): void {
+  const peak = combo >= 8 ? 0.13 : combo >= 5 ? 0.11 : 0.09;
+  playToneSequence(
+    [
+      { freq: 587.33, delay: 0, duration: 0.07 },
+      { freq: 740.0, delay: 0.05, duration: 0.08 },
+      { freq: 987.77, delay: 0.11, duration: 0.16 },
+    ],
+    peak,
   );
 }
