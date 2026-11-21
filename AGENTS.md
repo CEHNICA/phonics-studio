@@ -37,21 +37,37 @@ React 19 + TypeScript + Vite 8。线上站 https://5p3wt4cgcivtd.space.mcode.cn 
 
 改完音频素材或播放逻辑，`npm run check:audio` 必须 14/14 通过再提交。
 
+### 改卡片图前必读
+
+卡片图同样走阿里 OSS + CDN，`no-store` + 边缘 30 天缓存两条约束照样适用。
+
+当前基线：48 张手绘卡片图 **1050×623 WebP q82**，总体积 **1.55 MB**（原 1500×890 PNG 共 5.87 MB，-74%），单张 30–40 KB。
+
+两个硬约束：
+
+1. **必须严格同比例**。原图 1500×890 = 150:89，缩放后的整数尺寸必须是 150:89 的整数倍 —— 当前用 **1050×623**（×7）。卡片上的单词热区是按**百分比**定位的，比例一变热区就整体偏移。`npm run check:cards` 会真读 WebP 文件头解析像素尺寸来验这条。
+2. **不能超采样**。卡片展示区只有 463×275 CSS px，@2x DPR 需要 926px 宽，1050px 已有余量。原图 1500px 宽属于 3.2 倍超采样，纯浪费。
+
+改用 `ffmpeg -i in.png -vf scale=1050:623 -frames:v 1 -c:v libwebp -q:v 82 out.v2.webp`；转完用 SSIM 验视觉（阈值 0.98，当前全量最低 0.9932）。
+
+WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959。
+
 ### 体检器（尺子）
 
 | 命令 | 管什么 |
 | --- | --- |
 | `npm run check:video` | 视频体积预算、poster 齐全、catalog 字段、每个 `<video>` 都有 `preload`+`poster`（8 项） |
-| `npm run check:audio` | 音频数量/版本/体积预算、卡片词与例词全覆盖、路径版本化、预加载并发上限、`pendingKey` 存在（14 项） |
+| `npm run check:audio` | 音频数量/版本/体积预算、卡片词与例词全覆盖、路径版本化、预加载并发上限、`pendingKey` 存在、UI 里 pending 优先级（16 项） |
+| `npm run check:cards` | 卡片图数量/版本/体积预算、旧 PNG 已清、catalog 路径版本化、**真读 WebP 头验像素尺寸与宽高比**（10 项） |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
 
-改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 8/8 通过**再提交；改音频后 **`npm run check:audio` 必须 14/14 通过**再提交。
+改 `<video>` 标签或视频素材后，**`npm run check:video` 必须 8/8 通过**再提交；改音频后 **`npm run check:audio` 必须 16/16 通过**再提交；改卡片图后 **`npm run check:cards` 必须 10/10 通过**再提交。
 
 ### 提交与发版
 
 ```powershell
-npm run lint; npm test; npm run check:video; npm run check:audio; npm run build
+npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run build
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```

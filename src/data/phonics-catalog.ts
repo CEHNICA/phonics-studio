@@ -82,8 +82,11 @@ export const PHONEMES: PhonemeItem[] = dataset.phonemes.map((item, index) => {
     order: index + 1,
     family: category?.family ?? 'vowel',
     categoryTitle: category?.title ?? item.category,
-    // NOTE: 附加版本参数防止浏览器缓存旧尺寸卡片导致热区错位
-    cardSrc: `/assets/cards/${item.id}.png?v=2`,
+    // NOTE: v2 = 1125x667 WebP 重编码版（原 1500x890 PNG 超采样 3.2 倍，纯浪费带宽）。
+    // 文件名带版本号是为了绕开阿里 CDN 对旧文件的 30 天边缘缓存
+    // （源站 Cache-Control: no-store 只管浏览器，管不了 CDN）。
+    // 尺寸与宽高比和原图严格一致，卡片上的单词热区是按百分比定位的，不能变比例。
+    cardSrc: `/assets/cards/${item.id}.v2.webp`,
     localAudioSrc: `/assets/sound/${item.id}.v2.mp3`,
     // NOTE: v2 = 640x360 重编码版。文件名带版本号是为了绕开阿里 CDN 对旧文件的
     // 30 天边缘缓存（源站 Cache-Control: no-store 只管浏览器，管不了 CDN）
