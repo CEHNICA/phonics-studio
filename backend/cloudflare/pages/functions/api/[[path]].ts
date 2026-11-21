@@ -798,6 +798,10 @@ async function handleMemberState(request: Request, env: Env): Promise<Response> 
     return fail('请先登录', 401);
   }
   if (!auth.membership || !auth.space) {
+    // 还没进班级：读 = 没有云端状态（404），写 = 没有成员通道（403）
+    if (request.method === 'GET') {
+      return fail('你还没有加入任何班级', 404);
+    }
     return fail('你还没有加入任何班级', 403);
   }
   if (auth.membership.revoked_at) {
