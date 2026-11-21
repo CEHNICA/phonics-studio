@@ -1,18 +1,16 @@
 /**
- * 学习流程顺序 · 浏览器端到端验证（Playwright）
+ * 学习主道场 · 浏览器端到端验证（Playwright）
  *
- * 尺子（scripts/check-learning-flow.ts）证明的是「源码里顺序对不对」，
- * 这个脚本证明的是「真实浏览器里，用户看到的顺序对不对」。
+ * 尺子（scripts/check-learning-flow.ts）证明的是「源码里结构对不对」，
+ * 这个脚本证明的是「真实浏览器里，用户看到 / 点得到的东西对不对」。
  *
- * 验证四件事：
- *   1. 左栏只有**两步**编号徽标：1「听一遍，圈一圈」 → 2「跟读一遍」
- *   2. 物理顺序：卡片 → 圈出区 → 跟读区（跟读是最后一步）
- *   3. 跟读区第一个按钮是「先听一遍原声」，录音按钮排在它后面
- *   4. 圈出区视觉上（像素位置）在跟读区**上面**
+ * 当前架构（第 11 轮升级为「五维闭环道场」）：
+ *   阶段 1「看口型 · 拼装解码」——口型视频 + 字母拼写密码 + 音素拼装台 + 折叠记忆卡（圈出代表词在这）
+ *   阶段 2「开口纠偏 · 真词验耳」——声学纠偏仪（先听后录）+ 最小对立真词关
  *
  * 运行：
  *   node scripts/e2e-learning-flow.ts
- *   # 或指定站点
+ *   # 或指定站点（复验线上必须带 ?cb=<毫秒时间戳>，否则会被 CDN 边缘缓存骗）
  *   set TARGET_SITE=http://localhost:4173
  */
 import { createRequire } from 'node:module';
@@ -57,8 +55,13 @@ function check(name: string, cond: boolean, detail = '') {
 }
 
 async function main() {
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const browser = await chromium.launch({
+    args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream'],
+  });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    permissions: ['microphone'],
+  });
   const page = await context.newPage();
 
   const consoleErrors: string[] = [];
@@ -67,99 +70,153 @@ async function main() {
   });
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
+  const failedReq: string[] = [];
+  page.on('requestfailed', (r) => {
+    if (r.url().startsWith(SITE)) failedReq.push(`${r.url()} :: ${r.failure()?.errorText}`);
+  });
+
   await page.goto(`${SITE}/?cb=${Date.now()}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.illustrated-card-img', { timeout: 20000 });
+  await page.waitForSelector('.dojo-stage-tab', { timeout: 20000 });
   await page.waitForTimeout(800);
 
-  /* ---------- 1. 两步编号徽标 ---------- */
-  const badges = await page.$$eval('.card-stage-panel .step-badge', (els) =>
-    els.map((el) => ({
-      num: el.querySelector('.step-num')?.textContent?.trim() ?? '',
-      text: el.querySelector('.step-text')?.textContent?.trim() ?? '',
-      top: Math.round(el.getBoundingClientRect().top + window.scrollY),
-    })),
+  /* ---------- 1. 阶段切换条 ---------- */
+  const tabs = await page.$$('.dojo-stage-tab');
+  check('阶段切换条有 2 个 tab', tabs.length === 2, `实际 ${tabs.length}`);
+  const tabTexts = await page.$$eval('.dojo-stage-tab', (els) =>
+    els.map((e) => e.textContent?.trim() ?? ''),
   );
-  check('左栏只有 2 个步骤编号徽标（圈出不是独立一步）', badges.length === 2, `实际 ${badges.length}`);
-  check('步骤编号依次是 1 / 2', badges.map((b) => b.num).join(',') === '1,2', badges.map((b) => b.num).join(','));
   check(
-    '第 1 步是「听一遍，圈一圈」',
-    /听一遍/.test(badges[0]?.text ?? '') && /圈一圈/.test(badges[0]?.text ?? ''),
-    badges[0]?.text ?? '',
+    'tab1 是「看口型 · 拼装解码」',
+    (tabTexts[0] ?? '').includes('看口型') && (tabTexts[0] ?? '').includes('拼装解码'),
+    tabTexts.join(' | '),
   );
-  check('第 2 步是「跟读一遍」', (badges[1]?.text ?? '').includes('跟读一遍'), badges[1]?.text ?? '');
   check(
-    '两步在页面上从上到下排列',
-    badges.length === 2 && badges[0].top < badges[1].top,
-    badges.map((b) => `${b.num}@${b.top}`).join(' '),
+    'tab2 是「开口纠偏 · 真词验耳」',
+    (tabTexts[1] ?? '').includes('开口纠偏') && (tabTexts[1] ?? '').includes('真词验耳'),
+    tabTexts.join(' | '),
   );
+  const activeIdx = await page.$$eval('.dojo-stage-tab', (els) =>
+    els.findIndex((e) => e.className.includes('active')),
+  );
+  check('默认停在阶段 1（decode）', activeIdx === 0, `activeIdx=${activeIdx}`);
 
-  /* ---------- 2. 物理顺序：卡片 → 圈出区 → 跟读区 ---------- */
-  const geo = await page.evaluate(() => {
-    const rec = document.querySelector('.recorder-center-card');
-    const cir = document.querySelector('.codename-box');
-    const card = document.querySelector('.illustrated-card-frame');
-    const r = (el: Element | null) =>
-      el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : -1;
-    return { card: r(card), cir: r(cir), rec: r(rec) };
+  /* ---------- 2. 阶段 1 的内容 ---------- */
+  check('阶段 1 有字母拼写密码块', (await page.$('.spelling-patterns-box')) !== null);
+  check('阶段 1 有口型视频', (await page.$('video.mouth-video')) !== null);
+  check('阶段 1 有「一键合体拼读」按钮', (await page.$('text=一键合体拼读')) !== null);
+
+  // 口型视频要真能播（不是只摆个标签）
+  const videoState = await page.evaluate(async () => {
+    const v = document.querySelector('video.mouth-video');
+    if (!v) return 'no-video';
+    const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('播放口型视频'),
+    );
+    btn?.click();
+    await new Promise((r) => setTimeout(r, 900));
+    return `${v.currentTime.toFixed(2)}`;
   });
-  check(
-    '卡片在最上，圈出区居中，跟读区在最下',
-    geo.card > 0 && geo.card < geo.cir && geo.cir < geo.rec,
-    JSON.stringify(geo),
-  );
-  check(
-    '圈出区视觉上在跟读区上面（圈出属于第一步）',
-    geo.cir > 0 && geo.rec > 0 && geo.cir < geo.rec,
-    `圈出 @${geo.cir} / 跟读 @${geo.rec}`,
-  );
+  check('口型视频真能播放（currentTime > 0）', parseFloat(videoState) > 0, videoState);
 
-  /* ---------- 3. 跟读区按钮顺序 ---------- */
-  const btns = await page.$$eval('.recorder-actions > button', (els) =>
-    els.map((el) => ({
-      text: el.textContent?.trim().replace(/\s+/g, ' ') ?? '',
-      left: Math.round(el.getBoundingClientRect().left),
-      top: Math.round(el.getBoundingClientRect().top),
-    })),
-  );
-  const texts = btns.map((b) => b.text);
-  const listenIdx = texts.findIndex((t) => t.includes('先听一遍原声'));
-  const recordIdx = texts.findIndex((t) => t.includes('跟读录音') || t.includes('重新录音'));
-  check('跟读区有「先听一遍原声」按钮', listenIdx >= 0, texts.join(' | '));
-  check('跟读区有录音按钮', recordIdx >= 0, texts.join(' | '));
-  check(
-    '「先听一遍原声」排在录音按钮之前',
-    listenIdx >= 0 && recordIdx >= 0 && listenIdx < recordIdx,
-    `听原声 @${listenIdx} / 录音 @${recordIdx}`,
-  );
-  check('「先听一遍原声」是第一个按钮', listenIdx === 0, `实际在第 ${listenIdx + 1} 个`);
-  check(
-    '跟读区不再有旧的「只听原声」按钮',
-    !texts.some((t) => t === '只听原声'),
-    texts.join(' | '),
-  );
+  // 点「一键合体拼读」要走完并给出通关反馈
+  const blendResult = await page.evaluate(async () => {
+    const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('一键合体拼读'),
+    );
+    if (!btn) return 'no-btn';
+    btn.click();
+    await new Promise((r) => setTimeout(r, 4000));
+    const done = Array.from(document.querySelectorAll('*')).some(
+      (e) => e.children.length === 0 && /已完成拼读|拼读解锁/.test(e.textContent ?? ''),
+    );
+    return done ? 'unlocked' : 'not-unlocked';
+  });
+  check('点「一键合体拼读」后给出通关反馈', blendResult === 'unlocked', blendResult);
 
-  /* ---------- 4. 跟读小步提示 ---------- */
-  const stepLine = (await page.textContent('.recorder-step-line')) ?? '';
-  check(
-    '跟读区有 ① 先听原声 → ② 跟我读 提示',
-    stepLine.includes('先听原声') && stepLine.includes('跟我读'),
-    stepLine.replace(/\s+/g, ' '),
-  );
+  /* ---------- 3. 圈出最顺口词（记忆卡抽屉里，默认折叠） ---------- */
+  const expandState = await page.evaluate(async () => {
+    const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('手绘记忆卡片'),
+    );
+    if (!btn) return 'no-toggle';
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    return 'clicked';
+  });
+  check('记忆卡抽屉可展开', expandState === 'clicked', expandState);
 
-  /* ---------- 5. 圈出仍然可用（搬了位置不能把功能搬坏） ---------- */
   const chips = await page.$$('.rep-choice-chips .rep-chip');
-  check('圈出区的 3 个候选词还在', chips.length === 3, `实际 ${chips.length}`);
+  check('代表词候选 chip 有 3 个', chips.length === 3, `实际 ${chips.length}`);
   if (chips.length === 3) {
     await chips[0].click();
-    await page.waitForSelector('.card-circle-layer', { timeout: 5000 }).catch(() => null);
-    check('搬了位置后点词仍然能画圈', (await page.$$('.card-circle-layer')).length === 1);
+    await page.waitForSelector('svg.card-circle-layer', { timeout: 5000 }).catch(() => null);
+    check('选了代表词就画出圈', (await page.$$('svg.card-circle-layer')).length === 1);
+    const circleInfo = await page.evaluate(() => {
+      const svg = document.querySelector('svg.card-circle-layer');
+      if (!svg) return { viewBox: '', pe: '' };
+      return {
+        viewBox: svg.getAttribute('viewBox') ?? '',
+        pe: getComputedStyle(svg).pointerEvents,
+      };
+    });
+    check(
+      '圈层 viewBox 仍是 0 0 1050 623（与卡片图同坐标系）',
+      circleInfo.viewBox === '0 0 1050 623',
+      circleInfo.viewBox,
+    );
+    check('圈层 pointer-events:none（不挡「点词朗读」）', circleInfo.pe === 'none', circleInfo.pe);
+
     await chips[0].click();
-    await page.waitForTimeout(150);
-    check('再点一次仍然能取消圈', (await page.$$('.card-circle-layer')).length === 0);
+    await page.waitForTimeout(200);
+    check('再点一次仍然能取消圈', (await page.$$('svg.card-circle-layer')).length === 0);
   }
 
-  /* ---------- 6. 没有控制台报错 ---------- */
+  /* ---------- 4. 切到阶段 2 ---------- */
+  await page.click('.dojo-stage-tab:nth-of-type(2)');
+  await page.waitForTimeout(800);
+  const activeIdx2 = await page.$$eval('.dojo-stage-tab', (els) =>
+    els.findIndex((e) => e.className.includes('active')),
+  );
+  check('能切到阶段 2', activeIdx2 === 1, `activeIdx=${activeIdx2}`);
+
+  /* ---------- 5. 阶段 2：先听原声必须排在录音之前 ---------- */
+  const btnOrder = await page.evaluate(() => {
+    const all = Array.from(document.querySelectorAll('button'));
+    const listen = all.find((b) => b.textContent?.includes('先听一遍原声'));
+    const record = all.find((b) => b.textContent?.includes('按住/点击跟读录音'));
+    if (!listen) return { listen: false };
+    const l = listen.getBoundingClientRect();
+    const r = record?.getBoundingClientRect() ?? null;
+    return {
+      listen: true,
+      domListen: all.indexOf(listen),
+      domRecord: record ? all.indexOf(record) : -1,
+      listenX: l.left,
+      recordX: r ? r.left : -1,
+      sameRow: r ? Math.abs(l.top - r.top) < 4 : false,
+      hasOldText: all.some((b) => b.textContent?.trim() === '只听原声'),
+    };
+  });
+  check('阶段 2 有「先听一遍原声」按钮', btnOrder.listen === true, JSON.stringify(btnOrder));
+  if (btnOrder.listen) {
+    check(
+      '「先听一遍原声」在录音按钮之前（DOM 序）',
+      btnOrder.domRecord >= 0 && btnOrder.domListen < btnOrder.domRecord,
+      `听 @${btnOrder.domListen} / 录 @${btnOrder.domRecord}`,
+    );
+    check(
+      '「先听一遍原声」在录音按钮左边（同排时看 X）',
+      btnOrder.sameRow ? btnOrder.listenX < btnOrder.recordX : true,
+      `sameRow=${btnOrder.sameRow} listenX=${btnOrder.listenX} recordX=${btnOrder.recordX}`,
+    );
+    check('旧的「只听原声」按钮不再出现', btnOrder.hasOldText === false, '仍有旧按钮');
+  }
+  check('阶段 2 有声学纠偏仪', (await page.$('text=声学纠偏仪')) !== null);
+  check('阶段 2 有最小对立真词关', (await page.$('text=最小对立')) !== null);
+
+  /* ---------- 6. 整轮没有报错 ---------- */
   check('整轮操作没有控制台报错', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' // '));
+  check('整轮操作没有站内资源加载失败', failedReq.length === 0, failedReq.slice(0, 3).join(' // '));
 
   await browser.close();
 

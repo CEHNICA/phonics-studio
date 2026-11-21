@@ -207,6 +207,42 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 改完必须 `npm run check:dash-perf` **24/24 通过**再提交。
 
+### 改「学习主道场」（五维闭环）前必读
+
+**第 11 轮（2026-11-21）把学习主道场整个重做了**，不再是「卡片 → 圈出区 → 跟读区」的三段式。现在是**两个阶段 tab 切换**：
+
+| 阶段 | tab 文案 | 组件 | 内容 |
+| --- | --- | --- | --- |
+| 1（decode） | 「看口型 · 拼装解码」 | `src/components/PhonicsBlenderStage.tsx` | 口型视频（可 0.75x 慢速 / 循环）+ **字母拼写密码**（`PHONEME_DECODING_MAP`）+ **一键合体拼读**（逐音 → 整词）+ 折叠式手绘记忆卡（圈出代表词在这里） |
+| 2（practice） | 「开口纠偏 · 真词验耳」 | `src/components/PronunciationRadarStage.tsx` | **声学纠偏仪**（先听原声 → 跟读 → 偏移靶尺）+ **最小对立真词关**（连对 2 题解锁） |
+
+几条不能改坏的规矩：
+
+1. **「先听一遍原声」必须排在录音按钮前面**（DOM 序 + 同排时看 X）。这是老规矩，从没变过，只是搬进了新阶段。旧文案「只听原声」不许再当主按钮出现。
+2. **圈出最顺口词没被删，是搬进了「手绘记忆卡片 & 备忘代表词」折叠抽屉**（`showMemoryCard` 默认 false）。**圈层 SVG 只有在用户选了代表词之后才渲染** —— 没选词就没有 `svg.card-circle-layer` 节点，这跟「圈功能坏了」不是一回事，别误判。
+3. **圈的坐标系仍是 `viewBox="0 0 1050 623"` + `preserveAspectRatio="none"` + `pointer-events: none`**（圈层 className 挂在 `<svg>` 本身，不是外层 div）。
+4. **不许拿「点代表词」当完成**：`progress.representativeWord` 只是记忆标签，`completed` 必须靠实操解锁（拼读通关 / 开口达标 / 对立验耳三枚印章）。
+5. **新增的进度字段**（`PhonemeProgress`）：`speakingBestScore` / `lastConfusedWithId` / `blendedCompleted` / `minimalPairPassed` / `nextReviewAt`。合并规则见 `src/services/backend/merge.ts` —— `speakingBestScore` 取 **max**，布尔标记取**或**，别写成「取较新的一方」（那会把更好的分数丢掉）。
+6. **后端只往 `stats_json` 这个 JSON 列里加字段**（`weakTopIds` / `speakingPassedCount`），**不改表结构，不需要 D1 迁移**。
+7. **静态尺子与浏览器尺子必须一起改**。第 11 轮就出过事故：源码和 `check-learning-flow.ts` 都改了，唯独漏了 `scripts/e2e-learning-flow.ts` —— 它还在等 `.illustrated-card-img` 可见，而新架构里卡片图在**默认折叠**的抽屉里，首屏根本不渲染 → 脚本 20 秒超时崩溃，**一条断言都没跑出来**。改完必须 `npm run e2e:flow` 真跑一次，看到断言列表才算数。
+
+改完必须 `npm run check:flow` **8/8 通过** + `npm run e2e:flow` **24/24 通过**再提交。
+
+### ⚠️ 印刷语 ↔ 网站步骤：目前是**脱钩**的（待处理）
+
+**卡片图上印的仍然是**「听一遍、圈一圈，再跟读一遍。」**（`src/data/learning-flow.ts` 的 `CARD_INSTRUCTION`），48 张 `.v3.webp` 卡没重印。**
+
+但网站上的步骤徽标在第 11 轮重做时被**整个删掉了** —— `step-num` / `step-badge` / `LEARNING_STEPS` 现在**全仓无人引用**，`src/data/learning-flow.ts` 事实上成了死文件。孩子照着纸质卡做，网站上却只有「看口型 · 拼装解码 / 开口纠偏 · 真词验耳」，对不上。
+
+**为什么 `npm run check:print` 还是 11/11 全绿？** 因为它只在**自己内部**比对「重印脚本 NEW ↔ `learning-flow.ts` 常量 ↔ 卡片图墨迹」，**从来没校验网站组件真的用了这个常量**。这是尺子漏检（假绿），不是网站没问题。
+
+要对齐有两条路（重印卡片是重活：python 重印 48 张 → 换文件名 `.v3`→`.v4` → 重新推圈槽位 → 跑 `check:print`/`check:circle`/`check:cards`）：
+
+- **A. 网站加回两步徽标**：用现成的 `STEP_LISTEN_CIRCLE` / `STEP_READ_ALONG` 常量渲染回道场顶部，不动卡片图。
+- **B. 重印卡片印刷语**：承认新流程，改 `CARD_INSTRUCTION` + 重印 48 张卡。
+
+不管走哪条，都要给 `check:print` 补一条**「网站组件确实引用了 `learning-flow.ts` 的常量」**的断言，否则下次照样假绿。
+
 ### 改「圈出最顺口的词」前必读
 
 卡片图上印着「听一遍，跟读一遍，再圈出读起来最顺口的那个词」—— 圈这个动作以前**只存在于图片里**，代码里没有。现在补上了，改这块前必须知道这几条：
@@ -233,6 +269,9 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 ### 改「学习流程顺序」前必读
 
+> **本节已被第 11 轮的重构取代 —— 现在的主道场是「五维闭环」两阶段 tab（decode / practice）。**
+> 见上面「改「学习主道场」（五维闭环）前必读」。下面保留的是**仍然有效的历史规矩**（圈出属于学习流程的一部分、先听后录、两条尺子并行）。
+
 卡片上印的是「听一遍、**圈一圈**，再跟读一遍」，网站上是**两步**，别照着旧的三步式做成三步：
 
 1. **第 1 步 = 听一遍 + 圈一圈**。徽标文案是「听一遍，圈一圈」，提示「点卡片听发音，把读起来最顺口的那个词圈出来」。**圈出是第 1 步的一部分，不是独立的第 3 步**。
@@ -242,13 +281,13 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 **所有步骤文案都从 `src/data/learning-flow.ts` 取**（`STEP_LISTEN_CIRCLE` / `STEP_READ_ALONG` / `CARD_INSTRUCTION`），组件里不写死字面量。改文案改那个文件。
 
-**坑（尺子自身的坑，本轮踩到）**：
+**坑（尺子自身的坑，历史踩到）**：
 
 - `scripts/check-learning-flow.ts` 里所有「某文案不该出现 / 该出现在第几个」的断言都必须在**剥掉注释后的源码**上做。JSX 注释里也写着按钮文案，全文 grep 会把注释当成真按钮 —— 改坏按钮文案尺子照样全绿（假绿）。尺子里有 `stripComments()` 处理这个。
 - **「徽标在 X 之前」这类顺序断言要加「徽标存在才判」的守卫**。否则「删掉徽标」这个缺陷会同时红在「有编号徽标」和「徽标在卡片之前」两条上，逐项退回时对不上号（用户铁律：每条缺陷精确红在自己那条）。存在性归一条、顺序归另一条。
 - **组件里的文案改成常量后，尺子不能再 grep 字面量** —— 要 `import` 常量真跑，否则尺子假红。
 
-改完必须 `npm run check:flow` **17/17 通过** + `node scripts/e2e-learning-flow.ts` **17/17 通过**再提交。
+改完必须 `npm run check:flow` **8/8 通过** + `npm run e2e:flow` **24/24 通过**再提交。
 
 ### 改「卡片印刷语」前必读
 
@@ -289,8 +328,8 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 | `npm run check:dash-perf` | 「班级看板读取速度」：后端鉴权合 **1 条 JOIN**、看板接口 **1 次查询**、成员表一条 JOIN 带 LIMIT、缓存模块导出齐全、缓存 key 固定、**按班级隔离**、坏 JSON 安全退化、TTL ≥30s、预取节流、看板先读缓存再发请求、慢提示阈值 ≥600ms、看板**会调用**缓存读写、缓存够新不重复打、刷新/改名单强制 `load(true)`、App 在登录态就绪即预取 + 打开面板也预取（24 项） |
 | `npm run check:circle` | 「圈出最顺口的词」：槽位数据与卡片素材**一一对应**、槽位与素材实测误差 ≤4px、**圈覆盖率 ≥85%**、viewBox/preserveAspectRatio 坐标系、`pointer-events: none`、匹配纯函数真跑、旧口径文案全仓清零（24 项） |
 | `node scripts/e2e-card-circle.ts` | 上面那条尺子的**浏览器真机版**（Playwright，18 项）：点词出圈 → 坐标等于该卡槽位 → 再点取消 → 点卡片词只朗读不画圈 → 自写词不画圈 → 换音标圈不串 → **截图取红色像素换算回 1050×623 坐标系，与原图词的包围盒比对** |
-| `npm run check:flow` | 「学习流程顺序」：**只有两步**（1 听一遍+圈一圈 → 2 跟读一遍）、没有第 3 步、圈出区紧跟卡片、跟读区在最后、徽标位置、跟读区第一个按钮是「先听一遍原声」、小步提示 ① 先听原声 → ② 跟我读、步骤徽标 CSS 存在（17 项） |
-| `npm run e2e:flow` | 上面那条尺子的**浏览器真机版**（Playwright，17 项）：徽标只有 2 个且从上到下、圈出区**视觉上**在跟读区上面、「先听一遍原声」确实是跟读区第一个按钮、搬了位置后点词仍能画圈并取消 |
+| `npm run check:flow` | 「学习主道场」：阶段 tab 只有 2 个且顺序为 decode → practice、三枚真掌握印章齐全、阶段 1 有拼写密码与合体拼读、**「先听一遍原声」排在录音按钮之前**、阶段 2 有声学偏移靶尺与最小对立真词关、**没有「点代表词直接标 completed」的伪完成**、新道场 CSS 就绪（8 项） |
+| `npm run e2e:flow` | 上面那条尺子的**浏览器真机版**（Playwright，24 项）：两个阶段 tab 与切换、口型视频真能播（currentTime>0）、点「一键合体拼读」出通关反馈、**展开记忆卡抽屉后**选代表词真能画圈（viewBox 对 / pointer-events:none）、再点能取消圈、「先听一遍原声」DOM 序与 X 序都在录音之前、旧「只听原声」不出现、阶段 2 有声学纠偏仪与最小对立关、整轮零控制台错误、零站内请求失败 |
 | `npm run check:print` | 「卡片印刷语 ↔ 网站步骤」：印刷语含每步关键词（**每个关键词一条断言**）、关键词顺序一致、不含旧三步式、重印脚本与常量一字不差、48 张 .v3.webp、catalog 指 v3、**实际印出来的墨迹宽度/高度/左边距在区间**（11 项） |
 | `npm test` | 「待巩固」判定规则纯函数回归（8 项） |
 | `npm run lint` | oxlint |
@@ -304,6 +343,7 @@ WebP 完胜 JPEG：同尺寸下 WebP q82 的 SSIM 0.994，JPEG q85 只有 0.959�
 
 ```powershell
 npm run lint; npm test; npm run check:video; npm run check:audio; npm run check:cards; npm run check:js; npm run check:record; npm run check:motion; npm run check:role; npm run check:circle; npm run check:flow; npm run check:print; npm run check:account-net; npm run check:dash-perf; npm run build
+npm run e2e:flow   # 浏览器尺子，必须真跑、看到断言列表（崩了不算数）
 git add -A; git commit -m "..."; git push origin main
 # 刷新发布快照（_deploy\phonics-studio\site 与 \source），再 website_deploy(node_id=465432120414792)
 ```
@@ -344,3 +384,8 @@ git add -A; git commit -m "..."; git push origin main
 - **SQLite 的 `LIKE 'x\_%'` 不认反斜杠转义** —— 想删 `perf_` 前缀的行要用 `LIKE 'perf%'` 或显式 `ESCAPE` 子句，否则删 0 行还不报错。
 - **Playwright 日志分段打印会有竞态误读** —— 迟到的 response 会被打进上一段日志，看起来像「预取没生效」或「预取在点面板之后才发」。判断时序要用**同一个分段内的连续序号**，别跨段拼时间线。
 - **`wrangler` 走本机代理会报「auth token has expired」** —— 那是代理的 TLS 问题，不是凭据问题。跑 D1 命令前先 `$env:HTTP_PROXY=''; $env:HTTPS_PROXY=''; $env:ALL_PROXY=''; $env:NO_PROXY='*'` 直连。另外 `d1 execute --command` **只执行第一条语句**，多条要拆开跑。
+- **改了源码，别忘了改浏览器尺子** —— 第 11 轮就栽在这：源码和 `check-learning-flow.ts` 都改了，唯独漏了 `scripts/e2e-learning-flow.ts`，它还在等 `.illustrated-card-img` 可见（现在卡片图在默认折叠的抽屉里，首屏不渲染）→ 20 秒超时、**一条断言都没跑出来**、脚本直接崩。**尺子崩了比尺子红更可怕**：崩了没人知道它本来在守什么。
+- **尺子「全绿」不等于网站对** —— `check:print` 11/11 全绿，但网站上的步骤徽标已经被删了：它只在**自己内部**比对「重印脚本 ↔ 常量 ↔ 卡片墨迹」，**从没校验网站组件真的用了那个常量**。凡是「X 和 Y 要一致」的尺子，必须有一条断言真的去查**消费方**（谁 import 了它、谁渲染了它）。
+- **元素可能压根不在 DOM 里** —— 新架构里圈层 SVG **只有用户选了代表词之后才渲染**（`{circleSlot && (<svg …>)}`），记忆卡抽屉还默认折叠。断言「圈层存在」之前必须先展开抽屉 + 先选一个词，否则会误判成「圈功能坏了」。
+- **`svg.card-circle-layer` 的 className 挂在 svg 本身** —— 不是外层 div。选择器写 `.card-circle-layer svg` 会一个都选不到。
+- **首屏 JS 又胖了 42KB** —— 第 11 轮后首屏 chunk 119KB → **161KB**（`src/data/phonics-decoding.ts` 静态数据 34KB + 两个新阶段组件）。阿里 CDN **不压 `.js`**，字节数就是国内下载时间。`npm run check:js` 预算 300KB 拦不住这类「合法但很贵」的增长，动这块要盯着 `check:js` 报的首屏总量。
